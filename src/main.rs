@@ -1,11 +1,12 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
-use tokio_postgres::{NoTls, Error, types::ToSql};
+use tokio_postgres::{Client, NoTls, Error, types::ToSql};
 use serde_json::Value as Json;
 use futures::{pin_mut, TryStreamExt};
 use std::fs;
 use axum::{
     response::{Response, IntoResponse},
+    extract::State,
     http::{StatusCode, HeaderMap, Uri, header},
     routing::get,
     Error as AxumError,
@@ -13,24 +14,15 @@ use axum::{
     body::Body,
 };
 use axum_macros::debug_handler;
+use std::sync::Arc;
 
+#[derive(Clone)]
+struct AppState {
+    client: Arc<Client>,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    // Set up the router and routes
-    let app = Router::new()
-        .route("/", get(stream_sql_response));
-
-    // Run the application
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
-
-
-    Ok(())
-}
-
-#[debug_handler]
-async fn stream_sql_response() -> impl IntoResponse {
     // Connect to the database.
     let (client, connection) =
         tokio_postgres::connect("host=haus dbname=monitoring user=adam password=adam", NoTls).await.unwrap();
@@ -42,7 +34,26 @@ async fn stream_sql_response() -> impl IntoResponse {
             eprintln!("connection error: {}", e);
         }
     });
+    let state = AppState {
+        client: Arc::new(client),
+    };
 
+    // Set up the router and routes
+    let app = Router::new()
+        .route("/", get(stream_sql_response))
+        .with_state(state);
+
+    // Run the application
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+
+
+    Ok(())
+}
+
+#[debug_handler]
+async fn stream_sql_response(    State(state): State<AppState>,) -> impl IntoResponse {
+    let client = state.client;
     // Read the SQL contents from the file.
     let sql = fs::read_to_string("sql/test.sql").expect("Unable to read the SQL file");
 

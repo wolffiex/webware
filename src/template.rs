@@ -1,5 +1,6 @@
 use anyhow::Result;
 use html5gum::{HtmlString, IoReader, Tokenizer};
+use std::fmt::Write; // Import the Write trait which provides the write! macro for Strings.
 use std::fs::File;
 use std::io::{self, BufReader};
 use std::path::PathBuf;
@@ -13,48 +14,41 @@ pub struct Template {
 }
 
 impl Template {
-    pub fn parse(&self) -> Result<()> {
+    pub fn parse(&self) -> Result<String> {
         let file = File::open(&self.source)?;
         let reader = BufReader::new(file);
+        let mut result = String::new();
         for token in Tokenizer::new(IoReader::new(reader)).flatten() {
             // println!("{:?}", token);
-            let s = match token {
+            match token {
                 html5gum::Token::StartTag(tag) => {
-                    let mut s = format!("<{}", to_utf8(tag.name));
-                    let attr_string: String = tag
-                        .attributes
-                        .into_iter()
-                        .map(|(tag_name, tag_value)| {
-                            let tag_name_string = to_utf8(tag_name);
-                            let tag_value_string = to_utf8(tag_value);
-                            if tag_value_string.is_empty() {
-                                tag_name_string
-                            } else {
-                                format!("{}=\"{}\"", tag_name_string, tag_value_string)
-                            }
-                        })
-                        .collect::<Vec<_>>() // First, collect the mapped strings into a Vec
-                        .join(" "); // Then, join them with spaces
-                    if !attr_string.is_empty() {
-                        s.push(' ');
-                        s.push_str(&attr_string);
+                    write!(result, "<{}", to_utf8(tag.name))?;
+                    if tag.attributes.len() > 0 {
+                        write!(result, " ")?;
+                    }
+                    for (tag_name, tag_value) in tag.attributes {
+                        let tag_name_string = to_utf8(tag_name);
+                        let tag_value_string = to_utf8(tag_value);
+                        if tag_value_string.is_empty() {
+                            result.push_str(&tag_name_string);
+                        } else {
+                            write!(result, "{}=\"{}\"", tag_name_string, tag_value_string)?;
+                        }
                     }
                     if tag.self_closing {
-                        s.push_str("/")
+                        write!(result, "/")?;
                     }
-                    s.push_str("/>");
-                    s
-                }
-                html5gum::Token::EndTag(tag) => format!("</{}>", to_utf8(tag.name)),
-                html5gum::Token::String(html_string) => to_utf8(html_string),
-                html5gum::Token::Comment(_) => "".to_string(),
-                html5gum::Token::Doctype(_) => "<DOCTYPE>".to_string(),
+                    write!(result, ">")?;
+                },
+                html5gum::Token::EndTag(tag) => write!(result, "</{}>", to_utf8(tag.name))?,
+                html5gum::Token::String(html_string) => result.push_str(&to_utf8(html_string)),
+                html5gum::Token::Comment(_) => (),
+                html5gum::Token::Doctype(_) => write!(result, "<DOCTYPE>")?,
                 html5gum::Token::Error(err) => {
                     panic!("Error {:?}", err)
                 }
             };
-            print!("{}", s);
         }
-        return Ok(());
+        return Ok(result);
     }
 }

@@ -39,7 +39,7 @@ async fn main() -> Result<(), Error> {
         source: PathBuf::from("templates/index.html"),
     };
     let res = tmpl.parse();
-    println!("Result: {:?}", res);
+    println!("{}", res.unwrap());
     Ok(())
 }
 

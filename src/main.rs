@@ -1,10 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(unused_imports)]
-use futures::{stream, StreamExt}; // Assumed 'futures' is in the dependencies
 use anyhow::Result;
-use std::pin::Pin;
-use futures::Stream;
 use axum::{
     body::Body,
     extract::Query,
@@ -15,14 +12,17 @@ use axum::{
     Error as AxumError, Router,
 };
 use axum_macros::debug_handler;
+use futures::stream::select;
+use futures::Stream;
 use futures::{pin_mut, TryStreamExt};
+use futures::{stream, StreamExt}; // Assumed 'futures' is in the dependencies
 use serde_json::Value as Json;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::Arc;
 use tokio_postgres::{types::ToSql, Client, Error, NoTls};
-use futures::stream::select;
 mod template;
 
 // Import `MyStruct` into scope
@@ -98,13 +98,15 @@ async fn stream_sql_response(
     let it = client.query_raw(&sql, sql_params).await.unwrap();
 
     // Iterate over the stream to process each row.
-    let json_stream :JsonStream = Box::pin(it.map_ok(|row| {
-        let eventname = "stream1";
-        let value: Json = row.get(0);
-        // SSE
-        format!("event: {}\ndata: {}\n\n", eventname, value)
-    })
-    .map_err(|e| AxumError::new(e)));
+    let json_stream: JsonStream = Box::pin(
+        it.map_ok(|row| {
+            let eventname = "stream1";
+            let value: Json = row.get(0);
+            // SSE
+            format!("event: {}\ndata: {}\n\n", eventname, value)
+        })
+        .map_err(|e| AxumError::new(e)),
+    );
 
     let (client2, connection2) =
         tokio_postgres::connect("host=haus dbname=monitoring user=adam password=adam", NoTls)
@@ -120,14 +122,16 @@ async fn stream_sql_response(
     });
     let sql2: Vec<String> = vec![];
     let it2 = client2.query_raw(&sql, sql2).await.unwrap();
-    let js2 : JsonStream = Box::pin(it2.map_ok(|row| {
-        let eventname = "stream2";
-        let value: Json = row.get(0);
-        println!("foo {}", value);
-        // SSE
-        format!("event: {}\ndata: {}\n\n", eventname, value)
-    })
-    .map_err(|e| AxumError::new(e)));
+    let js2: JsonStream = Box::pin(
+        it2.map_ok(|row| {
+            let eventname = "stream2";
+            let value: Json = row.get(0);
+            println!("foo {}", value);
+            // SSE
+            format!("event: {}\ndata: {}\n\n", eventname, value)
+        })
+        .map_err(|e| AxumError::new(e)),
+    );
 
     let body = Body::from_stream(select(json_stream, js2));
 

@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![allow(unused_variables)]
 #![allow(unused_imports)]
 use futures::{stream, StreamExt}; // Assumed 'futures' is in the dependencies
 use anyhow::Result;
@@ -22,6 +23,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio_postgres::{types::ToSql, Client, Error, NoTls};
 use futures::stream::select;
+mod template;
+
+// Import `MyStruct` into scope
+use template::Template;
 
 #[derive(Clone)]
 struct AppState {
@@ -30,6 +35,15 @@ struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    let tmpl = Template {
+        source: PathBuf::from("templates/index.html"),
+    };
+    let res = tmpl.parse();
+    println!("Result: {:?}", res);
+    Ok(())
+}
+
+async fn serve() -> Result<(), Error> {
     // Connect to the database.
     let (client, connection) =
         tokio_postgres::connect("host=haus dbname=monitoring user=adam password=adam", NoTls)

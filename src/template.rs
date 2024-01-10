@@ -2,7 +2,7 @@ use anyhow::Result;
 use html5gum::{HtmlString, IoReader, Tokenizer};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::fmt::Write; // Import the Write trait which provides the write! macro for Strings.
+use std::fmt::Write;
 use std::fs::File;
 use std::io::{self, BufReader};
 use std::path::PathBuf;
@@ -58,10 +58,6 @@ impl StringTemplatePart {
     ) -> Result<()> {
         Ok(write!(self.content, "</{}>", to_utf8(name)?)?)
     }
-
-    pub fn finalize(self) -> String {
-        return self.content;
-    }
 }
 
 impl Template {
@@ -84,6 +80,6 @@ impl Template {
                 }
             };
         }
-        return Ok(part.finalize());
+        return Ok(part.content);
     }
 }

@@ -25,8 +25,7 @@ use std::sync::Arc;
 use tokio_postgres::{types::ToSql, Client, Error, NoTls};
 mod template;
 
-// Import `MyStruct` into scope
-use template::Template;
+use template::compile_template;
 
 #[derive(Clone)]
 struct AppState {
@@ -35,11 +34,8 @@ struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let tmpl = Template {
-        source: PathBuf::from("templates/index.html"),
-    };
-    let res = tmpl.parse();
-    println!("{}", res.unwrap());
+    let res = compile_template(&PathBuf::from("templates/index.html"));
+    println!("{}", res.unwrap().content);
     Ok(())
 }
 

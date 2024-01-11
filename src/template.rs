@@ -1,5 +1,5 @@
 use anyhow::Result;
-use html5gum::{HtmlString, IoReader, Tokenizer};
+use html5gum::{HtmlString, IoReader, Tokenizer, Token, StartTag};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -11,18 +11,36 @@ fn to_utf8(html_string: HtmlString) -> Result<String> {
     Ok(String::from_utf8(html_string.0.clone())?)
 }
 
+fn is_void_element(tag_name: &String) -> bool {
+    matches!(
+        tag_name.as_ref(),
+        "area" | "base" | "br" | "col" | "embed" | "hr" |
+        "img" | "input" | "link" | "meta" | "source" | "track" | "wbr"
+    )
+}
+
 pub struct Template {
-    pub source: PathBuf,
+    pub content: String,
 }
 
-pub struct StringTemplatePart {
-    content: String,
-}
-
-impl StringTemplatePart {
-    pub fn new() -> StringTemplatePart {
-        StringTemplatePart {
+impl Template {
+    pub fn new() -> Template {
+        Template {
             content: String::new(),
+        }
+    }
+    pub fn push_token(&mut self, token:Token) -> Result<()> {
+        match token {
+            Token::StartTag(tag) => {
+                self.handle_start_tag(tag)
+            }
+            Token::EndTag(tag) => self.write_end_tag(tag.name),
+            Token::String(html_string) => self.push_str(html_string),
+            Token::Doctype(_) => self.push_str(HtmlString("<DOCTYPE>".as_bytes().to_vec())),
+            Token::Comment(_) => Ok(()),
+            Token::Error(err) => {
+                panic!("Error {:?}", err)
+            }
         }
     }
 
@@ -31,22 +49,23 @@ impl StringTemplatePart {
         Ok(self.content.push_str(&s))
     }
 
-    pub fn write_start_tag(
+    pub fn handle_start_tag(
         &mut self,
-        name: HtmlString,
-        attributes: BTreeMap<HtmlString, HtmlString>,
-        self_closing: bool,
+        tag: StartTag,
     ) -> Result<()> {
-        write!(self.content, "<{}", to_utf8(name)?)?;
-        for (tag_name, tag_value) in attributes {
-            // let tag_value_string = to_utf8(tag_value)?;
-            if tag_value.is_empty() {
-                self.push_str(tag_name)?;
+        let tag_name = to_utf8(tag.name)?;
+        write!(self.content, "<{}", tag_name)?;
+        if tag.attributes.len() > 0 {
+            self.content.push_str(" ");
+        }
+        for (attr_name, attr_value) in tag.attributes {
+            let attr_name_string = self.push_str(attr_name)?;
+            if attr_value.is_empty() {
             } else {
-                write!(self.content, "{}=\"{}\"", to_utf8(tag_name)?, to_utf8(tag_value)?)?;
+                write!(self.content, "=\"{}\"", to_utf8(attr_value)?)?;
             }
         }
-        if self_closing {
+        if tag.self_closing {
             self.content.push_str("/");
         }
         Ok(self.content.push_str(">"))
@@ -60,26 +79,12 @@ impl StringTemplatePart {
     }
 }
 
-impl Template {
-    pub fn parse(&self) -> Result<String> {
-        let file = File::open(&self.source)?;
-        let reader = BufReader::new(file);
-        let mut part = StringTemplatePart::new();
-        for token in Tokenizer::new(IoReader::new(reader)).flatten() {
-            // println!("{:?}", token);
-            match token {
-                html5gum::Token::StartTag(tag) => {
-                    part.write_start_tag(tag.name, tag.attributes, tag.self_closing)?
-                }
-                html5gum::Token::EndTag(tag) => part.write_end_tag(tag.name)?,
-                html5gum::Token::String(html_string) => part.push_str(html_string)?,
-                html5gum::Token::Doctype(_) => part.push_str(HtmlString("<DOCTYPE>".as_bytes().to_vec()))?,
-                html5gum::Token::Comment(_) => (),
-                html5gum::Token::Error(err) => {
-                    panic!("Error {:?}", err)
-                }
-            };
-        }
-        return Ok(part.content);
+pub fn compile_template(source: &PathBuf) -> Result<Template> {
+    let file = File::open(source)?;
+    let reader = BufReader::new(file);
+    let mut template = Template::new();
+    for token in Tokenizer::new(IoReader::new(reader)).flatten() {
+        template.push_token(token)?;
     }
+    return Ok(template);
 }

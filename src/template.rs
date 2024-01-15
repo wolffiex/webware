@@ -82,9 +82,7 @@ impl Template {
             Token::EndTag(tag) => self.handle_end_tag(tag.name),
             Token::String(html_string) => Ok(vec![html_string.try_into()?]),
             Token::Comment(_) => Ok(Vec::new()),
-            Token::Error(err) => {
-                panic!("Error {:?}", err)
-            }
+            Token::Error(err) => Err(anyhow::anyhow!("Error {:?}", err)),
         }
     }
 

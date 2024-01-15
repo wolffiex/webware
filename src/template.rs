@@ -32,6 +32,8 @@ fn is_void_element(tag_name: &String) -> bool {
             | "source"
             | "track"
             | "wbr"
+            | "x-path"
+            | "x-embed"
     )
 }
 
@@ -46,6 +48,7 @@ pub struct Template {
     current_route: Option<Route>,
 }
 
+#[derive(Debug)]
 enum TemplatePart {
     Content(String),
     HeadInjection,
@@ -101,11 +104,20 @@ impl Template {
 
     fn push_tag(&mut self, tag_name: &String) {
         self.tag_stack.push(tag_name.to_string());
+        println!("{:?}", self.tag_stack);
     }
+
     fn pop_tag(&mut self, tag_name: &String) {
         let expected_tag = self.tag_stack.pop().expect("Tag stack is empty");
+        // if &expected_tag != tag_name{
+        //     for s in self.parts.iter().rev().take(8) {
+        //         println!("{:?}", s);
+        //     }
+        // }
         assert_eq!(&expected_tag, tag_name);
+        println!("{:?}", self.tag_stack);
     }
+
     fn handle_start_tag(&mut self, tag: StartTag) -> Result<Vec<TemplatePart>> {
         let tag_name = to_utf8(tag.name)?;
         self.push_tag(&tag_name);
@@ -124,7 +136,7 @@ impl Template {
             }
             _ => Some(self.convert_tag(&tag_name, tag.attributes, tag.self_closing)?),
         };
-        if tag.self_closing {
+        if tag.self_closing || is_void_element(&tag_name){
             self.pop_tag(&tag_name);
         }
         Ok(result.unwrap_or_else(Vec::new))
@@ -165,6 +177,7 @@ impl Template {
             parts.push(TemplatePart::BodyInjection);
         }
         parts.push(format!("</{}>", tag_name).into());
+        self.pop_tag(&tag_name);
         Ok(parts)
     }
 }

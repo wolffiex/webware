@@ -1,14 +1,14 @@
 use anyhow::Result;
 use html5gum::{HtmlString, IoReader, Tokenizer, Token, StartTag};
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 use std::fs::File;
 use std::io::{self, BufReader};
 use std::path::PathBuf;
 
 fn to_utf8(html_string: HtmlString) -> Result<String> {
-    Ok(String::from_utf8(html_string.0.clone())?)
+    Ok(String::from_utf8(html_string.0)?)
 }
 
 fn is_void_element(tag_name: &String) -> bool {
@@ -21,22 +21,37 @@ fn is_void_element(tag_name: &String) -> bool {
 
 pub struct Template {
     pub content: String,
+    tag_stack: Vec<String>,
+    parts: Vec<TemplatePart>,
 }
 
+enum TemplatePart {
+    Content(String),
+    HeadInjection,
+    Route,
+    Embed(String),
+    BodyInjection,
+}
+
+struct Route {}
+
+fn render(mut route: Route, templates: &HashMap<String, Vec<TemplatePart>>) {
+    todo!();
+}
 impl Template {
     pub fn new() -> Template {
         Template {
             content: String::new(),
+            tag_stack: vec![],
+            parts:  vec![TemplatePart::Content(String::new())],
         }
     }
     pub fn push_token(&mut self, token:Token) -> Result<()> {
         match token {
-            Token::StartTag(tag) => {
-                self.handle_start_tag(tag)
-            }
-            Token::EndTag(tag) => self.write_end_tag(tag.name),
-            Token::String(html_string) => self.push_str(html_string),
-            Token::Doctype(_) => self.push_str(HtmlString("<DOCTYPE>".as_bytes().to_vec())),
+            Token::Doctype(_) => self.push_html_str(HtmlString("<DOCTYPE>".as_bytes().to_vec())),
+            Token::StartTag(tag) => self.handle_start_tag(tag),
+            Token::EndTag(tag) => self.handle_end_tag(tag.name),
+            Token::String(html_string) => self.push_html_str(html_string),
             Token::Comment(_) => Ok(()),
             Token::Error(err) => {
                 panic!("Error {:?}", err)
@@ -44,9 +59,12 @@ impl Template {
         }
     }
 
-    fn push_str(&mut self, html_string: HtmlString) -> Result<()> {
-        let s = to_utf8(html_string)?;
-        Ok(self.content.push_str(&s))
+    fn push_html_str(&mut self, html_string: HtmlString) -> Result<()> {
+        self.push_str(&to_utf8(html_string)?)
+    }
+
+    fn push_str(&mut self, s: &String) -> Result<()> {
+        Ok(self.content.push_str(s))
     }
 
     pub fn handle_start_tag(
@@ -59,7 +77,7 @@ impl Template {
             self.content.push_str(" ");
         }
         for (attr_name, attr_value) in tag.attributes {
-            let attr_name_string = self.push_str(attr_name)?;
+            let attr_name_string = self.push_html_str(attr_name)?;
             if attr_value.is_empty() {
             } else {
                 write!(self.content, "=\"{}\"", to_utf8(attr_value)?)?;
@@ -71,11 +89,19 @@ impl Template {
         Ok(self.content.push_str(">"))
     }
 
-    pub fn write_end_tag(
+    pub fn handle_end_tag(
         &mut self,
         name: HtmlString,
     ) -> Result<()> {
-        Ok(write!(self.content, "</{}>", to_utf8(name)?)?)
+        let tag_name = to_utf8(name)?;
+        if tag_name == "head" {
+            self.parts.push(TemplatePart::HeadInjection);
+        }
+        if tag_name == "body" {
+            self.parts.push(TemplatePart::BodyInjection);
+        }
+        write!(self.content, "</{}>", tag_name)?;
+        Ok(())
     }
 }
 

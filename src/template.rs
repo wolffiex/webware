@@ -38,7 +38,7 @@ fn is_void_element(tag_name: &String) -> bool {
 }
 
 struct Route {
-    paths: Vec<HashMap<String, String>>,
+    paths: Vec<BTreeMap<String, String>>,
 }
 
 pub struct Template {
@@ -104,7 +104,7 @@ impl Template {
 
     fn push_tag(&mut self, tag_name: &String) {
         self.tag_stack.push(tag_name.to_string());
-        println!("{:?}", self.tag_stack);
+        // println!("{:?}", self.tag_stack);
     }
 
     fn pop_tag(&mut self, tag_name: &String) {
@@ -115,37 +115,49 @@ impl Template {
         //     }
         // }
         assert_eq!(&expected_tag, tag_name);
-        println!("{:?}", self.tag_stack);
+        // println!("{:?}", self.tag_stack);
     }
 
     fn handle_start_tag(&mut self, tag: StartTag) -> Result<Vec<TemplatePart>> {
         let tag_name = to_utf8(tag.name)?;
         self.push_tag(&tag_name);
-        let result: Option<Vec<TemplatePart>> = match tag_name.as_str() {
+        let mut attrs = BTreeMap::new();
+        for (key, value) in tag.attributes.into_iter() {
+            attrs.insert(to_utf8(key)?, to_utf8(value)?);
+        }
+        let result: Result<Vec<TemplatePart>> = match tag_name.as_str() {
             "x-route" => {
-                println!("REOUT {:?}", &tag.attributes);
-                None
+                assert!(self.current_route.is_none());
+                self.current_route = Some(Route { paths: Vec::new() });
+                Ok(Vec::new())
             }
             "x-path" => {
-                println!("pEIANT {:?}", &tag.attributes);
-                None
+                println!("pEIANT {:?}", &attrs);
+                self.current_route
+                    .as_mut()
+                    .map(|route| route.paths.push(attrs))
+                    .ok_or(anyhow::anyhow!("Found path outside of route"))?;
+                Ok(Vec::new())
             }
             "x-embed" => {
-                println!("EMERDB {:?}", &tag.attributes);
-                None
+                println!("EMERDB {:?}", &attrs);
+                attrs
+                    .get("template")
+                    .map(|template| Ok(vec![TemplatePart::Embed(template.to_string())]))
+                    .unwrap_or_else(|| Err(anyhow::anyhow!("x-embed missing \"template\"")))
             }
-            _ => Some(self.convert_tag(&tag_name, tag.attributes, tag.self_closing)?),
+            _ => Ok(self.convert_tag(&tag_name, attrs, tag.self_closing)?),
         };
-        if tag.self_closing || is_void_element(&tag_name){
+        if tag.self_closing || is_void_element(&tag_name) {
             self.pop_tag(&tag_name);
         }
-        Ok(result.unwrap_or_else(Vec::new))
+        result
     }
 
     fn convert_tag(
         &mut self,
         tag_name: &String,
-        attributes: BTreeMap<HtmlString, HtmlString>,
+        attributes: BTreeMap<String, String>,
         self_closing: bool,
     ) -> Result<Vec<TemplatePart>> {
         let mut parts: Vec<TemplatePart> = Vec::new();
@@ -154,10 +166,9 @@ impl Template {
             parts.push(" ".into());
         }
         for (attr_name, attr_value) in attributes {
-            let attr_name_string = to_utf8(attr_name)?;
-            parts.push(attr_name_string.into());
+            parts.push(attr_name.into());
             if !attr_value.is_empty() {
-                parts.push(format!("=\"{}\"", to_utf8(attr_value)?).into());
+                parts.push(format!("=\"{}\"", attr_value).into());
             }
         }
         if self_closing {

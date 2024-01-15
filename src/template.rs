@@ -37,6 +37,7 @@ fn is_void_element(tag_name: &String) -> bool {
     )
 }
 
+#[derive(Debug)]
 struct Route {
     paths: Vec<BTreeMap<String, String>>,
 }
@@ -45,14 +46,14 @@ pub struct Template {
     sources: HashSet<String>,
     tag_stack: Vec<String>,
     parts: Vec<TemplatePart>,
-    current_route: Option<Route>,
+    partial_route: Option<Route>,
 }
 
 #[derive(Debug)]
 enum TemplatePart {
     Content(String),
     HeadInjection,
-    Route,
+    Route(Route),
     Embed(String),
     BodyInjection,
 }
@@ -83,7 +84,7 @@ impl Template {
             sources: HashSet::new(),
             tag_stack: vec![],
             parts: vec![TemplatePart::Content(String::new())],
-            current_route: None,
+            partial_route: None,
         };
         for token in tokens {
             let new_parts = template.push_token(token)?;
@@ -116,6 +117,9 @@ impl Template {
         // }
         assert_eq!(&expected_tag, tag_name);
         // println!("{:?}", self.tag_stack);
+        if expected_tag.as_str() == "x-route" {
+            self.parts.push(TemplatePart::Route(self.partial_route.take().unwrap()));
+        }
     }
 
     fn handle_start_tag(&mut self, tag: StartTag) -> Result<Vec<TemplatePart>> {
@@ -127,13 +131,13 @@ impl Template {
         }
         let result: Result<Vec<TemplatePart>> = match tag_name.as_str() {
             "x-route" => {
-                assert!(self.current_route.is_none());
-                self.current_route = Some(Route { paths: Vec::new() });
+                assert!(self.partial_route.is_none());
+                self.partial_route = Some(Route { paths: Vec::new() });
                 Ok(Vec::new())
             }
             "x-path" => {
                 println!("pEIANT {:?}", &attrs);
-                self.current_route
+                self.partial_route
                     .as_mut()
                     .map(|route| route.paths.push(attrs))
                     .ok_or(anyhow::anyhow!("Found path outside of route"))?;
@@ -198,4 +202,31 @@ pub fn compile_template(source: &PathBuf) -> Result<Template> {
     let reader = BufReader::new(file);
     let tokenizer = Tokenizer::new(IoReader::new(reader)).flatten();
     Template::compile(tokenizer)
+}
+
+struct TemplateCollection {
+    directory: PathBuf,
+}
+
+impl TemplateCollection {
+    pub fn render(&self, route: &String) {
+        let index_html = "index.html".to_string();
+        self.render_template(route, self.compile_template(&index_html).unwrap());
+    }
+
+    pub fn compile_template(&self, file_name: &String) -> Result<Template> {
+        let mut path = self.directory.clone();
+        path.push(file_name);
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+        let tokenizer = Tokenizer::new(IoReader::new(reader)).flatten();
+        Template::compile(tokenizer)
+    }
+
+    fn render_template(&self, route: &String, template:Template) {
+    }
+}
+
+struct Page {
+    content : String
 }

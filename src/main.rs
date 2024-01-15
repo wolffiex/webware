@@ -35,7 +35,7 @@ struct AppState {
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let res = compile_template(&PathBuf::from("templates/index.html"));
-    println!("{}", res.unwrap().content);
+    // println!("{}", res.unwrap().content);
     Ok(())
 }
 

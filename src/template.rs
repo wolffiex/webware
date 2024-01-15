@@ -1,11 +1,16 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_imports)]
 use anyhow::Result;
 use html5gum::{HtmlString, IoReader, Tokenizer, Token, StartTag};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::convert::TryFrom;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::{self, BufReader};
 use std::path::PathBuf;
+use std::iter::Flatten;
 
 fn to_utf8(html_string: HtmlString) -> Result<String> {
     Ok(String::from_utf8(html_string.0)?)
@@ -19,8 +24,12 @@ fn is_void_element(tag_name: &String) -> bool {
     )
 }
 
+struct Route {
+    paths: Vec<HashMap<String, String>>,
+}
+
 pub struct Template {
-    pub content: String,
+    sources: HashSet<String>,
     tag_stack: Vec<String>,
     parts: Vec<TemplatePart>,
 }
@@ -33,84 +42,96 @@ enum TemplatePart {
     BodyInjection,
 }
 
-struct Route {}
-
-fn render(mut route: Route, templates: &HashMap<String, Vec<TemplatePart>>) {
-    todo!();
+impl From<&str> for TemplatePart {
+    fn from(s: &str) -> Self {
+        TemplatePart::Content(s.to_string())
+    }
 }
+
+impl From<String> for TemplatePart {
+    fn from(s: String) -> Self {
+        TemplatePart::Content(s)
+    }
+}
+
+impl TryFrom<HtmlString> for TemplatePart {
+    type Error = anyhow::Error;
+    fn try_from(html_s: HtmlString) -> Result<Self> {
+        Ok(TemplatePart::Content(to_utf8(html_s)?))
+    }
+}
+
+type TokenStream = Flatten<Tokenizer<IoReader<BufReader<File>>>>;
 impl Template {
-    pub fn new() -> Template {
-        Template {
-            content: String::new(),
+    pub fn compile(tokens: TokenStream) -> Result<Template> {
+        let mut template = Template {
+            sources: HashSet::new(),
             tag_stack: vec![],
             parts:  vec![TemplatePart::Content(String::new())],
+        };
+        for token in tokens{
+            let new_parts = template.push_token(token)?;
+            template.parts.extend(new_parts);
         }
+        return Ok(template);
     }
-    pub fn push_token(&mut self, token:Token) -> Result<()> {
+    fn push_token(&mut self, token:Token) -> Result<Vec<TemplatePart>> {
         match token {
-            Token::Doctype(_) => self.push_html_str(HtmlString("<DOCTYPE>".as_bytes().to_vec())),
+            Token::Doctype(_) => Ok(vec!["<DOCTYPE>".into()]),
             Token::StartTag(tag) => self.handle_start_tag(tag),
             Token::EndTag(tag) => self.handle_end_tag(tag.name),
-            Token::String(html_string) => self.push_html_str(html_string),
-            Token::Comment(_) => Ok(()),
+            Token::String(html_string) => Ok(vec![html_string.try_into()?]),
+            Token::Comment(_) => Ok(Vec::new()),
             Token::Error(err) => {
                 panic!("Error {:?}", err)
             }
         }
     }
 
-    fn push_html_str(&mut self, html_string: HtmlString) -> Result<()> {
-        self.push_str(&to_utf8(html_string)?)
-    }
-
-    fn push_str(&mut self, s: &String) -> Result<()> {
-        Ok(self.content.push_str(s))
-    }
-
-    pub fn handle_start_tag(
+    fn handle_start_tag(
         &mut self,
         tag: StartTag,
-    ) -> Result<()> {
+    ) -> Result<Vec<TemplatePart>> {
+        let mut parts : Vec<TemplatePart>= Vec::new();
         let tag_name = to_utf8(tag.name)?;
-        write!(self.content, "<{}", tag_name)?;
+        parts.push(format!("<{}", tag_name).into());
         if tag.attributes.len() > 0 {
-            self.content.push_str(" ");
+            parts.push(" ".into());
         }
         for (attr_name, attr_value) in tag.attributes {
-            let attr_name_string = self.push_html_str(attr_name)?;
-            if attr_value.is_empty() {
-            } else {
-                write!(self.content, "=\"{}\"", to_utf8(attr_value)?)?;
+            let attr_name_string = to_utf8(attr_name)?;
+            parts.push(attr_name_string.into());
+            if !attr_value.is_empty() {
+                parts.push(format!("=\"{}\"", to_utf8(attr_value)?).into());
             }
         }
         if tag.self_closing {
-            self.content.push_str("/");
+            parts.push("/".into());
         }
-        Ok(self.content.push_str(">"))
+        parts.push(">".into());
+        Ok(parts)
     }
 
-    pub fn handle_end_tag(
+    fn handle_end_tag(
         &mut self,
         name: HtmlString,
-    ) -> Result<()> {
+    ) -> Result<Vec<TemplatePart>> {
+        let mut parts : Vec<TemplatePart>= Vec::new();
         let tag_name = to_utf8(name)?;
         if tag_name == "head" {
-            self.parts.push(TemplatePart::HeadInjection);
+            parts.push(TemplatePart::HeadInjection);
         }
         if tag_name == "body" {
-            self.parts.push(TemplatePart::BodyInjection);
+            parts.push(TemplatePart::BodyInjection);
         }
-        write!(self.content, "</{}>", tag_name)?;
-        Ok(())
+        parts.push(format!("</{}>", tag_name).into());
+        Ok(parts)
     }
 }
 
 pub fn compile_template(source: &PathBuf) -> Result<Template> {
     let file = File::open(source)?;
     let reader = BufReader::new(file);
-    let mut template = Template::new();
-    for token in Tokenizer::new(IoReader::new(reader)).flatten() {
-        template.push_token(token)?;
-    }
-    return Ok(template);
+    let tokenizer = Tokenizer::new(IoReader::new(reader)).flatten();
+    Template::compile(tokenizer)
 }

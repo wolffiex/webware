@@ -305,6 +305,7 @@ impl Page {
             r#"
             <script>
               const sources = {}
+              console.log(sources)
               const queryParams = sources.map((str, index) => 
                   `source=${{encodeURIComponent(str)}}`).join('&');
               const eventSource = new EventSource('/api?' + queryParams);
@@ -322,7 +323,7 @@ impl Page {
                 resolver = null
                 if (currentResolver) currentResolver()
               }};
-              return async function*() {{
+              window.apiEventSource = async function*() {{
                 while (streamRunning || eventBuffer.length) {{
                   if (eventBuffer.length > 0) {{
                     yield eventBuffer.shift();
@@ -339,8 +340,8 @@ impl Page {
         ));
     }
 
-    fn inject_body(&mut self) -> Result<()> {
-        Ok(())
+    fn inject_body(&mut self) {
+        self.html.push_str(r#"<script type="module" src="index.js"></script>"#);
     }
 
     fn process_template(
@@ -357,7 +358,7 @@ impl Page {
                 match part {
                     TemplatePart::Content(s) => self.html.push_str(s),
                     TemplatePart::HeadInjection => self.inject_head(),
-                    TemplatePart::BodyInjection => self.inject_body()?,
+                    TemplatePart::BodyInjection => self.inject_body(),
                     TemplatePart::Source(_) => (),
                     _ => unreachable!(),
                 };

@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
             "/",
             get(|| async { Ok::<Html<String>, Infallible>(Html(res)) }),
         )
-        .route("/stream", get(stream_sql_response))
+        .route("/api", get(stream_sql_response))
         .fallback_service(dist_service)
         .with_state(state);
 

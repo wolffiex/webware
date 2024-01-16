@@ -1,30 +1,30 @@
+use rayon::prelude::*;
+use std::hash::{Hash, Hasher};
 use std::fs;
-use std::io::{Result, Write};
 use std::time::UNIX_EPOCH;
+use std::io::Result;
 use std::path::Path;
+
 use std::collections::hash_map::DefaultHasher;
-use std::hash::Hasher;
-use std::io::BufWriter;
 
 fn compute_cache_key<P: AsRef<Path>>(path: P) -> Result<u64> {
-    let mut entries: Vec<_> = fs::read_dir(path)?
+    let entries: Vec<_> = fs::read_dir(&path)?
         .map(|res| res.map(|e| e.path()))
         .collect::<Result<Vec<_>>>()?;
 
-    // sort entries by name
-    entries.sort();
+    let mut hasher = DefaultHasher::new();
 
-    let mut writer = BufWriter::new(Vec::new());
-    for entry_path in entries {
+    entries.par_iter().try_for_each(|entry_path| {
         let metadata = fs::metadata(&entry_path)?;
         let mtime = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs();
-        writer.write_all(&entry_path.as_os_str().as_bytes())?;
-        writer.write_all(&mtime.to_ne_bytes())?;
-    }
-    let data = writer.buffer();
+        let relative_path = entry_path.strip_prefix(&path)?.as_os_str().as_bytes();
 
-    let mut hasher = DefaultHasher::new();
-    hasher.write(data);
+        relative_path.hash(&mut hasher);
+        mtime.hash(&mut hasher);
+
+        Ok(())
+    })?;
+
     Ok(hasher.finish())
 }
 

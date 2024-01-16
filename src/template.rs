@@ -1,8 +1,9 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(unused_imports)]
-use anyhow::Result;
 use anyhow::Context;
+use anyhow::Result;
+use html5gum::Doctype;
 use html5gum::{HtmlString, IoReader, StartTag, Token, Tokenizer};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -110,7 +111,7 @@ impl Template {
     }
     fn push_token(&mut self, token: Token) -> Result<Vec<TemplatePart>> {
         match token {
-            Token::Doctype(_) => Ok(vec!["<DOCTYPE>".into()]),
+            Token::Doctype(doc_type) => self.handle_doctype(doc_type),
             Token::StartTag(tag) => self.handle_start_tag(tag),
             Token::EndTag(tag) => self.handle_end_tag(tag.name),
             Token::String(html_string) => Ok(vec![html_string.try_into()?]),
@@ -191,7 +192,7 @@ impl Template {
                 ":source" => parts.push(TemplatePart::Source(attr_value)),
                 value if value.starts_with(":") => {
                     println!("ATR {} {}", attr_name, attr_value);
-                },
+                }
                 _ => {
                     parts.push(attr_name.into());
                     if !attr_value.is_empty() {
@@ -216,9 +217,17 @@ impl Template {
         if tag_name == "body" {
             parts.push(TemplatePart::BodyInjection);
         }
-        parts.push(format!("</{}>", tag_name).into());
+
+        if !tag_name.starts_with("x-") {
+            parts.push(format!("</{}>", tag_name).into());
+        }
         self.pop_tag(&tag_name);
         Ok(parts)
+    }
+
+    fn handle_doctype(&self, doc_type: Doctype) -> Result<Vec<TemplatePart>> {
+        let doc_string = format!("<!DOCTYPE {}>", to_utf8(doc_type.name)?);
+        Ok(vec![doc_string.into()])
     }
 }
 
@@ -234,12 +243,11 @@ struct TemplateCollection {
 }
 
 impl TemplateCollection {
-
     pub fn compile_template(&self, file_name: &String) -> Result<Template> {
         let mut path = self.directory.clone();
         path.push(file_name);
-        let file = File::open(path.clone()).with_context(
-            || format!("Failed to open file {}", path.display()))?;
+        let file = File::open(path.clone())
+            .with_context(|| format!("Failed to open file {}", path.display()))?;
         let reader = BufReader::new(file);
         let tokenizer = Tokenizer::new(IoReader::new(reader)).flatten();
         Template::compile(tokenizer)
@@ -250,8 +258,8 @@ impl TemplateCollection {
         self.compile_template(&index_html)
     }
 }
-pub fn get_page(url_path: String, directory: PathBuf) -> Result<String>{
-    let collection = TemplateCollection{directory};
+pub fn get_page(url_path: String, directory: PathBuf) -> Result<String> {
+    let collection = TemplateCollection { directory };
     Page::build(url_path, &collection)
 }
 
@@ -284,7 +292,7 @@ impl Page {
                 println!("Wanttoefome {}", file_name);
                 let template = collection.compile_template(&file_name)?;
                 self.collect(url_path, &template, collection)?;
-            }else if let TemplatePart::Source(name) = part {
+            } else if let TemplatePart::Source(name) = part {
                 self.sources.insert(name.to_owned());
             }
         }
@@ -293,7 +301,8 @@ impl Page {
 
     fn inject_head(&mut self) {
         let sources_json = serde_json::to_string(&self.sources).unwrap_or("[]".into());
-        self.html.push_str(&format!(r#"
+        self.html.push_str(&format!(
+            r#"
             <script>
               const sources = {}
               const queryParams = sources.map((str, index) => 
@@ -325,7 +334,9 @@ impl Page {
                 }}
               }}
             </script>
-        "#, sources_json));
+        "#,
+            sources_json
+        ));
     }
 
     fn inject_body(&mut self) -> Result<()> {

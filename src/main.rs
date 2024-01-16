@@ -7,7 +7,7 @@ use axum::{
     extract::Query,
     extract::State,
     http::{header, HeaderMap, StatusCode, Uri},
-    response::{IntoResponse, Response},
+    response::{Html, IntoResponse, Response},
     routing::get,
     Error as AxumError, Router,
 };
@@ -18,10 +18,12 @@ use futures::{pin_mut, TryStreamExt};
 use futures::{stream, StreamExt}; // Assumed 'futures' is in the dependencies
 use serde_json::Value as Json;
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio_postgres::{types::ToSql, Client, Error, NoTls};
 mod template;
 
@@ -34,18 +36,13 @@ struct AppState {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
-    // let res = compile_template(&PathBuf::from("templates/index.html"));
-    let res = get_page("/weather".into(), PathBuf::from("templates"));
-    match res {
-        Ok(html) => println!("HHH {}", html),
-        Err(e) => eprintln!("Error: {}", e),
-    }
+async fn main() -> Result<()> {
+    let now = Instant::now(); // get current time
 
-    Ok(())
-}
+    let res = get_page("/weather".into(), PathBuf::from("templates"))?;
+    let elapsed = now.elapsed(); // get elapsed time
+    println!("Compilation took: {:.2?}", elapsed);
 
-async fn serve() -> Result<(), Error> {
     // Connect to the database.
     let (client, connection) =
         tokio_postgres::connect("host=haus dbname=monitoring user=adam password=adam", NoTls)
@@ -65,6 +62,10 @@ async fn serve() -> Result<(), Error> {
 
     // Set up the router and routes
     let app = Router::new()
+        .route(
+            "/",
+            get(|| async { Ok::<Html<String>, Infallible>(Html(res)) }),
+        )
         .route("/stream", get(stream_sql_response))
         .with_state(state);
 

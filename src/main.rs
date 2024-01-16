@@ -38,7 +38,7 @@ async fn main() -> Result<(), Error> {
     // let res = compile_template(&PathBuf::from("templates/index.html"));
     let res = get_page("/weather".into(), PathBuf::from("templates"));
     match res {
-        Ok(html) => println!("{}", html),
+        Ok(html) => println!("HHH {}", html),
         Err(e) => eprintln!("Error: {}", e),
     }
 

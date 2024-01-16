@@ -268,6 +268,7 @@ impl Page {
             sources: HashSet::new(),
         };
         page.collect(&mut url_path.clone(), &index_template, collection)?;
+        page.process_template(&mut url_path.clone(), &"index.html".to_string(), collection)?;
         println!("SROUE {:?}", page.sources);
         Ok(page.html)
     }
@@ -290,8 +291,41 @@ impl Page {
         Ok(())
     }
 
-    fn inject_head(&mut self) -> Result<()>{
-        Ok(())
+    fn inject_head(&mut self) {
+        let sources_json = serde_json::to_string(&self.sources).unwrap_or("[]".into());
+        self.html.push_str(&format!(r#"
+            <script>
+              const sources = {}
+              const queryParams = sources.map((str, index) => 
+                  `source=${{encodeURIComponent(str)}}`).join('&');
+              const eventSource = new EventSource('/api?' + queryParams);
+              let streamRunning = true
+              const eventBuffer = [];
+              eventSource.addEventListener('stream_stop', () => {{
+                streamRunning = false
+                eventSource.close();
+              }});
+
+              let resolver = null
+              eventSource.onmessage = e => {{
+                eventBuffer.push(e);
+                const currentResolver = resolver
+                resolver = null
+                if (currentResolver) currentResolver()
+              }};
+              return async function*() {{
+                while (streamRunning || eventBuffer.length) {{
+                  if (eventBuffer.length > 0) {{
+                    yield eventBuffer.shift();
+                  }} else {{
+                    await new Promise((resolve, _) => {{
+                      resolver = resolve
+                    }});
+                  }}
+                }}
+              }}
+            </script>
+        "#, sources_json));
     }
 
     fn inject_body(&mut self) -> Result<()> {
@@ -311,8 +345,9 @@ impl Page {
             } else {
                 match part {
                     TemplatePart::Content(s) => self.html.push_str(s),
-                    TemplatePart::HeadInjection => self.inject_head()?,
+                    TemplatePart::HeadInjection => self.inject_head(),
                     TemplatePart::BodyInjection => self.inject_body()?,
+                    TemplatePart::Source(_) => (),
                     _ => unreachable!(),
                 };
             }

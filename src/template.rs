@@ -341,7 +341,8 @@ impl Page {
     }
 
     fn inject_body(&mut self) {
-        self.html.push_str(r#"<script type="module" src="index.js"></script>"#);
+        self.html
+            .push_str(r#"<script type="module" src="index.js"></script>"#);
     }
 
     fn process_template(

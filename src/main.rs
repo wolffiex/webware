@@ -65,12 +65,11 @@ async fn main() -> Result<()> {
 
     // Set up the router and routes
     let app = Router::new()
-        .route(
-            "/",
-            get(|| async { Ok::<Html<String>, Infallible>(Html(res)) }),
-        )
+        .nest_service("/html", ServeDir::new("./project/html"))
+        .nest_service("/dist", ServeDir::new("./project/dist"))
+        .nest_service("/netware", ServeDir::new("./html"))
         .route("/api", get(stream_sql_response))
-        .fallback_service(dist_service)
+        .fallback(get(|| async { Ok::<Html<String>, Infallible>(Html(res)) }))
         .with_state(state);
 
     // Run the application
@@ -89,7 +88,7 @@ async fn stream_sql_response(
 ) -> impl IntoResponse {
     let client = state.client;
     // Read the SQL contents from the file.
-    let sql = fs::read_to_string("project/sql/test.sql").expect("Unable to read the SQL file");
+    let sql = fs::read_to_string("project/sql/samples.sql").expect("Unable to read the SQL file");
     println!("PA {:?}", params.get("q"));
     let sql_files_content = read_sql_files().unwrap();
     println!("fff {:?}", sql_files_content);
@@ -153,7 +152,7 @@ async fn stream_sql_response(
 }
 
 fn read_sql_files() -> Result<HashMap<String, String>> {
-    let directory = Path::new("sql");
+    let directory = Path::new("project/sql");
     assert!(directory.is_dir());
     Ok(fs::read_dir(directory)?
         .filter_map(|entry| {

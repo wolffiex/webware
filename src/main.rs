@@ -2,19 +2,20 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 use anyhow::Result;
+
 use axum::{
     body::Body,
     extract::Query,
     extract::State,
-    http::{header, HeaderMap, StatusCode, Uri},
-    response::{Html, IntoResponse, Response},
+    http::StatusCode,
+    response::{Html, IntoResponse},
     routing::get,
     Error as AxumError, Router,
 };
 use axum_macros::debug_handler;
 use futures::stream::select;
 use futures::Stream;
-use futures::{pin_mut, TryStreamExt};
+use futures::TryStreamExt;
 use futures::{stream, StreamExt}; // Assumed 'futures' is in the dependencies
 use serde_json::Value as Json;
 use std::collections::HashMap;
@@ -24,10 +25,10 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio_postgres::{types::ToSql, Client, Error, NoTls};
+use tokio_postgres::{Client, NoTls};
+use tower_http::services::ServeDir;
 mod template;
 
-use template::compile_template;
 use template::get_page;
 
 #[derive(Clone)]
@@ -60,6 +61,8 @@ async fn main() -> Result<()> {
         client: Arc::new(client),
     };
 
+    let dist_service = ServeDir::new("dist");
+
     // Set up the router and routes
     let app = Router::new()
         .route(
@@ -67,6 +70,7 @@ async fn main() -> Result<()> {
             get(|| async { Ok::<Html<String>, Infallible>(Html(res)) }),
         )
         .route("/stream", get(stream_sql_response))
+        .fallback_service(dist_service)
         .with_state(state);
 
     // Run the application

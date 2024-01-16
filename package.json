@@ -1,0 +1,13 @@
+{
+  "name": "netware",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "build-css": "tailwindcss -i ./html_src/index.css -o ./dist/index.css"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "tailwindcss": "^3.4.1"
+  }
+}

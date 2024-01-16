@@ -2,6 +2,7 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 use anyhow::Result;
+use anyhow::Context;
 use html5gum::{HtmlString, IoReader, StartTag, Token, Tokenizer};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -237,7 +238,8 @@ impl TemplateCollection {
     pub fn compile_template(&self, file_name: &String) -> Result<Template> {
         let mut path = self.directory.clone();
         path.push(file_name);
-        let file = File::open(path)?;
+        let file = File::open(path.clone()).with_context(
+            || format!("Failed to open file {}", path.display()))?;
         let reader = BufReader::new(file);
         let tokenizer = Tokenizer::new(IoReader::new(reader)).flatten();
         Template::compile(tokenizer)
@@ -247,6 +249,10 @@ impl TemplateCollection {
         let index_html = "index.html".to_string();
         self.compile_template(&index_html)
     }
+}
+pub fn get_page(url_path: String, directory: PathBuf) -> Result<String>{
+    let collection = TemplateCollection{directory};
+    Page::build(url_path, &collection)
 }
 
 struct Page {
@@ -274,6 +280,7 @@ impl Page {
     ) -> Result<()> {
         for part in &template.parts {
             if let Some(file_name) = Page::resolve_reference(url_path, &part)? {
+                println!("Wanttoefome {}", file_name);
                 let template = collection.compile_template(&file_name)?;
                 self.collect(url_path, &template, collection)?;
             }else if let TemplatePart::Source(name) = part {

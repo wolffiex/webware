@@ -26,6 +26,7 @@ use tokio_postgres::{types::ToSql, Client, Error, NoTls};
 mod template;
 
 use template::compile_template;
+use template::get_page;
 
 #[derive(Clone)]
 struct AppState {
@@ -34,8 +35,13 @@ struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let res = compile_template(&PathBuf::from("templates/index.html"));
-    // println!("{}", res.unwrap().content);
+    // let res = compile_template(&PathBuf::from("templates/index.html"));
+    let res = get_page("/weather".into(), PathBuf::from("templates"));
+    match res {
+        Ok(html) => println!("{}", html),
+        Err(e) => eprintln!("Error: {}", e),
+    }
+
     Ok(())
 }
 

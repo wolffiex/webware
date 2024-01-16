@@ -42,6 +42,22 @@ struct Route {
     paths: Vec<BTreeMap<String, String>>,
 }
 
+impl Route {
+    fn match_path(&self, url_path: &mut String) -> Result<String> {
+        assert_eq!('/', url_path.remove(0));
+
+        // find the index of the next slash
+        let index = url_path.find('/').unwrap_or(url_path.len());
+        let path_part: String = url_path.drain(..index).collect();
+        for path in &self.paths {
+            if Some(&path_part) == path.get("url") {
+                return Ok(path.get("file").expect("No file for path.").to_owned());
+            }
+        }
+        Err(anyhow::anyhow!("No match for path {}", url_path))
+    }
+}
+
 pub struct Template {
     sources: HashSet<String>,
     tag_stack: Vec<String>,
@@ -118,7 +134,8 @@ impl Template {
         assert_eq!(&expected_tag, tag_name);
         // println!("{:?}", self.tag_stack);
         if expected_tag.as_str() == "x-route" {
-            self.parts.push(TemplatePart::Route(self.partial_route.take().unwrap()));
+            self.parts
+                .push(TemplatePart::Route(self.partial_route.take().unwrap()));
         }
     }
 
@@ -209,10 +226,6 @@ struct TemplateCollection {
 }
 
 impl TemplateCollection {
-    pub fn render(&self, route: &String) {
-        let index_html = "index.html".to_string();
-        self.render_template(route, self.compile_template(&index_html).unwrap());
-    }
 
     pub fn compile_template(&self, file_name: &String) -> Result<Template> {
         let mut path = self.directory.clone();
@@ -223,10 +236,79 @@ impl TemplateCollection {
         Template::compile(tokenizer)
     }
 
-    fn render_template(&self, route: &String, template:Template) {
+    fn get_index(&self) -> Result<Template> {
+        let index_html = "index.html".to_string();
+        self.compile_template(&index_html)
     }
 }
 
 struct Page {
-    content : String
+    html: String,
+    sources: HashSet<String>,
+}
+
+impl Page {
+    fn build(url_path: String, collection: &TemplateCollection) -> Result<String> {
+        let index_template = collection.get_index()?;
+        let mut page = Page {
+            html: String::new(),
+            sources: HashSet::new(),
+        };
+        page.collect_sources(&mut url_path.clone(), &index_template, collection)?;
+        Ok(page.html)
+    }
+
+    fn collect_sources(
+        &mut self,
+        url_path: &mut String,
+        template: &Template,
+        collection: &TemplateCollection,
+    ) -> Result<()> {
+        self.sources.extend(template.sources.clone());
+        for part in &template.parts {
+            if let Some(file_name) = Page::resolve_reference(url_path, &part)? {
+                let template = collection.compile_template(&file_name)?;
+                self.collect_sources(url_path, &template, collection)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn inject_head(&mut self) -> Result<()>{
+        Ok(())
+    }
+
+    fn inject_body(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn process_template(
+        &mut self,
+        url_path: &mut String,
+        template_file_name: &String,
+        collection: &TemplateCollection,
+    ) -> Result<()> {
+        let template = collection.compile_template(template_file_name)?;
+        for part in &template.parts {
+            if let Some(file_name) = Page::resolve_reference(url_path, part)? {
+                self.process_template(url_path, &file_name, collection)?;
+            } else {
+                match part {
+                    TemplatePart::Content(s) => self.html.push_str(s),
+                    TemplatePart::HeadInjection => self.inject_head()?,
+                    TemplatePart::BodyInjection => self.inject_body()?,
+                    _ => unreachable!(),
+                };
+            }
+        }
+        Ok(())
+    }
+
+    fn resolve_reference(url_path: &mut String, part: &TemplatePart) -> Result<Option<String>> {
+        match part {
+            TemplatePart::Embed(file_name) => Ok(Some(file_name.to_string())),
+            TemplatePart::Route(route) => route.match_path(url_path).map(|s| Some(s.to_owned())),
+            _ => Ok(None),
+        }
+    }
 }

@@ -11,7 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/dayjs/plugin/relativeTime.js"></script>
 </head>
 <body class="h-full">
-<div :for="x in xs" class="min-h-full" x-init="console.log('Im initing')">
+<div class="min-h-full">
   <nav class="border-b border-gray-200 bg-white">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="flex h-16 justify-between">
@@ -76,7 +76,7 @@
       <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
 <!-- Recent client list-->
 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-  <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-none">
+  <div :source="summary.sql" class="mx-auto max-w-2xl lg:mx-0 lg:max-w-none">
     <ul role="list" class="mt-6 grid grid-cols-1 gap-x-6 gap-y-8 lg:grid-cols-3 xl:gap-x-8">
       <li class="overflow-hidden rounded-xl border border-gray-200">
         <div class="flex items-center gap-x-4 border-b border-gray-900/5 bg-gray-50 p-6">
@@ -118,12 +118,12 @@
         <dl class="-my-3 divide-y divide-gray-100 px-6 py-4 text-sm leading-6">
           <div class="flex justify-between gap-x-4 py-3">
             <dt class="text-gray-500">Last update</dt>
-            <dd class="text-gray-900" x-text="$store.summary.time"></dd>
+            <dd class="text-gray-900" :text="$store.summary.time"></dd>
           </div>
           <div class="flex justify-between gap-x-4 py-3">
             <dt class="text-gray-500">Temp</dt>
             <dd class="flex items-start gap-x-2">
-              <div class="font-medium text-gray-900" x-text="$store.summary.outdoor_temp"></div>
+              <div class="font-medium text-gray-900" :text="$store.summary.outdoor_temp"></div>
             </dd>
           </div>
           <div class="flex justify-between gap-x-4 py-3">
@@ -167,7 +167,7 @@
   <x-embed template="test.html">
 </div>
 <div>
-  <canvas id="myChart"></canvas>
+  <canvas id="myChart" :source="samples.sql"></canvas>
   <x-route>
     <x-path url="weather" file="weather.html"/>
     <x-path url="system" file="system.html"/>

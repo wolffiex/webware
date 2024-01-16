@@ -59,7 +59,6 @@ impl Route {
 }
 
 pub struct Template {
-    sources: HashSet<String>,
     tag_stack: Vec<String>,
     parts: Vec<TemplatePart>,
     partial_route: Option<Route>,
@@ -72,6 +71,7 @@ enum TemplatePart {
     Route(Route),
     Embed(String),
     BodyInjection,
+    Source(String),
 }
 
 impl From<&str> for TemplatePart {
@@ -97,7 +97,6 @@ type TokenStream = Flatten<Tokenizer<IoReader<BufReader<File>>>>;
 impl Template {
     pub fn compile(tokens: TokenStream) -> Result<Template> {
         let mut template = Template {
-            sources: HashSet::new(),
             tag_stack: vec![],
             parts: vec![TemplatePart::Content(String::new())],
             partial_route: None,
@@ -187,9 +186,17 @@ impl Template {
             parts.push(" ".into());
         }
         for (attr_name, attr_value) in attributes {
-            parts.push(attr_name.into());
-            if !attr_value.is_empty() {
-                parts.push(format!("=\"{}\"", attr_value).into());
+            match attr_name.as_str() {
+                ":source" => parts.push(TemplatePart::Source(attr_value)),
+                value if value.starts_with(":") => {
+                    println!("ATR {} {}", attr_name, attr_value);
+                },
+                _ => {
+                    parts.push(attr_name.into());
+                    if !attr_value.is_empty() {
+                        parts.push(format!("=\"{}\"", attr_value).into());
+                    }
+                }
             }
         }
         if self_closing {
@@ -254,21 +261,23 @@ impl Page {
             html: String::new(),
             sources: HashSet::new(),
         };
-        page.collect_sources(&mut url_path.clone(), &index_template, collection)?;
+        page.collect(&mut url_path.clone(), &index_template, collection)?;
+        println!("SROUE {:?}", page.sources);
         Ok(page.html)
     }
 
-    fn collect_sources(
+    fn collect(
         &mut self,
         url_path: &mut String,
         template: &Template,
         collection: &TemplateCollection,
     ) -> Result<()> {
-        self.sources.extend(template.sources.clone());
         for part in &template.parts {
             if let Some(file_name) = Page::resolve_reference(url_path, &part)? {
                 let template = collection.compile_template(&file_name)?;
-                self.collect_sources(url_path, &template, collection)?;
+                self.collect(url_path, &template, collection)?;
+            }else if let TemplatePart::Source(name) = part {
+                self.sources.insert(name.to_owned());
             }
         }
         Ok(())

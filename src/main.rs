@@ -40,7 +40,7 @@ struct AppState {
 async fn main() -> Result<()> {
     let now = Instant::now(); // get current time
 
-    let res = get_page("/weather".into(), PathBuf::from("templates"))?;
+    let res = get_page("/weather".into(), PathBuf::from("project/templates"))?;
     let elapsed = now.elapsed(); // get elapsed time
     println!("Compilation took: {:.2?}", elapsed);
 
@@ -61,7 +61,7 @@ async fn main() -> Result<()> {
         client: Arc::new(client),
     };
 
-    let dist_service = ServeDir::new("dist");
+    let dist_service = ServeDir::new("project/dist");
 
     // Set up the router and routes
     let app = Router::new()
@@ -89,7 +89,7 @@ async fn stream_sql_response(
 ) -> impl IntoResponse {
     let client = state.client;
     // Read the SQL contents from the file.
-    let sql = fs::read_to_string("sql/test.sql").expect("Unable to read the SQL file");
+    let sql = fs::read_to_string("project/sql/test.sql").expect("Unable to read the SQL file");
     println!("PA {:?}", params.get("q"));
     let sql_files_content = read_sql_files().unwrap();
     println!("fff {:?}", sql_files_content);

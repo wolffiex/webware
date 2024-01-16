@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "build-css": "tailwindcss -i ./html/index.css -o ./dist/index.css"
+    "build-css": "tailwindcss -i ./src/index.css -o ./dist/index.css"
   },
   "author": "",
   "license": "ISC",

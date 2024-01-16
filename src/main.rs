@@ -40,7 +40,7 @@ struct AppState {
 async fn main() -> Result<()> {
     let now = Instant::now(); // get current time
 
-    let res = get_page("/weather".into(), PathBuf::from("project/templates"))?;
+    let res = get_page("/weather".into(), PathBuf::from("project/src/templates"))?;
     let elapsed = now.elapsed(); // get elapsed time
     println!("Compilation took: {:.2?}", elapsed);
 
@@ -65,9 +65,7 @@ async fn main() -> Result<()> {
 
     // Set up the router and routes
     let app = Router::new()
-        .nest_service("/html", ServeDir::new("./project/html"))
-        .nest_service("/dist", ServeDir::new("./project/dist"))
-        .nest_service("/netware", ServeDir::new("./html"))
+        .nest_service("/www", ServeDir::new("./project/www"))
         .route("/api", get(stream_sql_response))
         .fallback(get(|| async { Ok::<Html<String>, Infallible>(Html(res)) }))
         .with_state(state);
@@ -88,7 +86,7 @@ async fn stream_sql_response(
 ) -> impl IntoResponse {
     let client = state.client;
     // Read the SQL contents from the file.
-    let sql = fs::read_to_string("project/sql/samples.sql").expect("Unable to read the SQL file");
+    let sql = fs::read_to_string("project/src/sql/samples.sql").expect("Unable to read the SQL file");
     println!("PA {:?}", params.get("q"));
     let sql_files_content = read_sql_files().unwrap();
     println!("fff {:?}", sql_files_content);
@@ -152,7 +150,7 @@ async fn stream_sql_response(
 }
 
 fn read_sql_files() -> Result<HashMap<String, String>> {
-    let directory = Path::new("project/sql");
+    let directory = Path::new("project/src/sql");
     assert!(directory.is_dir());
     Ok(fs::read_dir(directory)?
         .filter_map(|entry| {

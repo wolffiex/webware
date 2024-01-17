@@ -96,9 +96,10 @@ async fn stream_sql_response(
         UnboundedReceiver<Result<String, anyhow::Error>>,
     ) = unbounded_channel();
 
-    let join_handle = send_sql_result(state.client_pool, sources, tx);
     tokio::spawn(async move {
-        join_handle.await
+        send_sql_result(state.client_pool, sources, tx)
+            .await
+            .unwrap();
     });
 
     let rx_stream = UnboundedReceiverStream::new(rx);

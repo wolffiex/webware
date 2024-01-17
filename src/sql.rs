@@ -24,12 +24,11 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio_postgres::{Client, NoTls};
 
-
 pub async fn get_sql_client() -> Client {
     // Connect to the database.
     let (client, connection) =
         tokio_postgres::connect("host=haus dbname=monitoring user=adam password=adam", NoTls)
-        // tokio_postgres::connect("host=dev23 dbname=draculadb user=adam password=adam", NoTls)
+            // tokio_postgres::connect("host=dev23 dbname=draculadb user=adam password=adam", NoTls)
             .await
             .unwrap();
 

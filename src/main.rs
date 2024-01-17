@@ -8,11 +8,10 @@ use axum::{
     extract::Query,
     extract::State,
     http::StatusCode,
-    response::{Html, IntoResponse},
+    response::{Html, IntoResponse, Redirect},
     routing::get,
     Error as AxumError, Router,
 };
-use tower_http::trace::TraceLayer;
 use axum_macros::debug_handler;
 use futures::stream::select;
 use futures::Stream;
@@ -27,7 +26,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio_postgres::{Client, NoTls};
-use tower_http::services::{ServeFile, ServeDir};
+use tower_http::services::{ServeDir, ServeFile};
+use tower_http::trace::TraceLayer;
 mod sql;
 mod template;
 
@@ -54,13 +54,15 @@ async fn main() -> Result<()> {
         client: Arc::new(sql_client),
     };
 
-    let dist_service = ServeDir::new("project/dist");
-
     // Set up the router and routes
     let app = Router::new()
         .nest_service("/www", ServeDir::new("project/www"))
         .route("/api", get(stream_sql_response))
         .route_service("/index.js", ServeFile::new("www/index.js"))
+        .route(
+            "/favicon.ico",
+            get(|| async { Redirect::permanent("/www/images/favicon.ico") }),
+        )
         .fallback(get(|| async { Ok::<Html<String>, Infallible>(Html(res)) }))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -71,4 +73,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-

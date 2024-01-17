@@ -27,11 +27,11 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio_postgres::{Client, NoTls};
 use tower_http::services::ServeDir;
-mod template;
 mod sql;
+mod template;
 
-use template::get_page;
 use sql::{get_sql_client, stream_sql_response};
+use template::get_page;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -69,4 +69,3 @@ async fn main() -> Result<()> {
 }
 
 type JsonStream = Pin<Box<dyn Stream<Item = Result<String, AxumError>> + Send>>;
-

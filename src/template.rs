@@ -107,7 +107,7 @@ impl Template {
             let new_parts = template.push_token(token)?;
             template.parts.extend(new_parts);
         }
-        return Ok(template);
+        Ok(template)
     }
     fn push_token(&mut self, token: Token) -> Result<Vec<TemplatePart>> {
         match token {
@@ -184,13 +184,13 @@ impl Template {
     ) -> Result<Vec<TemplatePart>> {
         let mut parts: Vec<TemplatePart> = Vec::new();
         parts.push(format!("<{}", tag_name).into());
-        if attributes.len() > 0 {
+        if !attributes.is_empty() {
             parts.push(" ".into());
         }
         for (attr_name, attr_value) in attributes {
             match attr_name.as_str() {
                 ":source" => parts.push(TemplatePart::Source(attr_value)),
-                value if value.starts_with(":") => {
+                value if value.starts_with(':') => {
                     println!("ATR {} {}", attr_name, attr_value);
                 }
                 _ => {
@@ -288,7 +288,7 @@ impl Page {
         collection: &TemplateCollection,
     ) -> Result<()> {
         for part in &template.parts {
-            if let Some(file_name) = Page::resolve_reference(url_path, &part)? {
+            if let Some(file_name) = Page::resolve_reference(url_path, part)? {
                 println!("Wanttoefome {}", file_name);
                 let template = collection.compile_template(&file_name)?;
                 self.collect(url_path, &template, collection)?;

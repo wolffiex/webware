@@ -2,6 +2,7 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 use crate::AppState;
+use std::time::Instant;
 use anyhow::Result;
 use axum::{
     body::Body,
@@ -14,7 +15,7 @@ use axum::{
 use axum_macros::debug_handler;
 use bytes::Bytes;
 use deadpool_postgres::{Config, Manager, Pool, Runtime};
-use futures::stream::select;
+use futures::{stream::select, pin_mut};
 use futures::Stream;
 use futures::TryStreamExt;
 use futures::{stream, StreamExt};
@@ -70,10 +71,17 @@ pub async fn send_sql_result(
     // Iterate over the stream to process each row.
     // Execute the query and get results.
     let sql_params: Vec<String> = vec![];
+    let now = Instant::now(); // get current time
     let client = client_pool.get().await.unwrap();
+    let elapsed = now.elapsed(); // get elapsed time
+    println!("Client took: {:.2?}", elapsed);
+    let now = Instant::now(); // get current time
     let stream = client.query_raw(&sql, sql_params.iter()).await.unwrap();
-    let mut rows = Box::pin(stream);
-    while let Some(Ok(row)) = rows.next().await {
+    let elapsed = now.elapsed(); // get elapsed time
+    println!("stream took: {:.2?}", elapsed);
+    pin_mut!(stream);
+    let now = Instant::now(); // get current time
+    while let Some(Ok(row)) = stream.next().await {
         let eventname = "stream1";
         let maybe_value: Option<Json> = row.get(0);
         // tokio::time::sleep(Duration::from_secs(1)).await;
@@ -88,30 +96,9 @@ pub async fn send_sql_result(
             break;
         }
     }
+    let elapsed = now.elapsed(); // get elapsed time
+    println!("finished map took: {:.2?}", elapsed);
     Ok(())
-    // .map_err(anyhow::Error::new)
-    // })
-    // it.for_each(move |row_result| {
-    // it.for_each(move |row_result| {
-    //     let tx1a = tx.clone();
-    //     async move {
-    //         let event = row_result
-    //             .map(|row| {
-    //                 let eventname = "stream1";
-    //                 let value: Json = row.get(0);
-    //                 // SSE
-    //                 format!("event: {}\ndata: {}\n\n", eventname, value)
-    //             })
-    //             .map_err(anyhow::Error::new);
-
-    //         // tokio::time::sleep(Duration::from_secs(1)).await;
-    //         if let Err(_) = tx1a.send(event) {
-    //             // handle this error as you see fit
-    //             println!("WHALKJER");
-    //         }
-    //     }
-    // })
-    // }.await))
 }
 
 fn read_sql_files() -> Result<HashMap<String, String>> {

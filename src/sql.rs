@@ -5,8 +5,7 @@ use crate::AppState;
 use anyhow::Result;
 use axum::{
     body::Body,
-    extract::Query,
-    extract::State,
+    extract::{Query, State},
     http::StatusCode,
     response::{Html, IntoResponse},
     routing::get,
@@ -25,11 +24,12 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio_postgres::{Client, NoTls};
 
+
 pub async fn get_sql_client() -> Client {
     // Connect to the database.
     let (client, connection) =
-        // tokio_postgres::connect("host=haus dbname=monitoring user=adam password=adam", NoTls)
-        tokio_postgres::connect("host=dev23 dbname=draculadb user=adam password=adam", NoTls)
+        tokio_postgres::connect("host=haus dbname=monitoring user=adam password=adam", NoTls)
+        // tokio_postgres::connect("host=dev23 dbname=draculadb user=adam password=adam", NoTls)
             .await
             .unwrap();
 
@@ -46,20 +46,19 @@ pub async fn get_sql_client() -> Client {
 #[debug_handler]
 pub async fn stream_sql_response(
     State(state): State<AppState>,
-    Query(params): Query<HashMap<String, String>>,
+    Query(params): Query<Vec<(String, String)>>,
 ) -> impl IntoResponse {
     let client = state.client;
     // Read the SQL contents from the file.
     let sql =
         fs::read_to_string("project/src/sql/samples.sql").expect("Unable to read the SQL file");
-    println!("PA {:?}", params.get("q"));
     let sql_files_content = read_sql_files().unwrap();
     println!("fff {:?}", sql_files_content);
-
-    let streams: Vec<&str> = params
-        .get("q")
-        .expect("No streams given")
-        .split(',')
+    let sources: Vec<String> = params
+        .iter()
+        .filter(|(key, _)| key == "source")
+        .map(|(_, value)| value)
+        .cloned()
         .collect();
 
     // Execute the query and get results.

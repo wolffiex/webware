@@ -12,6 +12,7 @@ use axum::{
     routing::get,
     Error as AxumError, Router,
 };
+use tower_http::trace::TraceLayer;
 use axum_macros::debug_handler;
 use futures::stream::select;
 use futures::Stream;
@@ -26,7 +27,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio_postgres::{Client, NoTls};
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeFile, ServeDir};
 mod sql;
 mod template;
 
@@ -40,6 +41,7 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
     let now = Instant::now(); // get current time
 
     let res = get_page("/weather".into(), PathBuf::from("project/src/templates"))?;
@@ -56,9 +58,11 @@ async fn main() -> Result<()> {
 
     // Set up the router and routes
     let app = Router::new()
-        .nest_service("/www", ServeDir::new("./project/www"))
+        .nest_service("/www", ServeDir::new("project/www"))
         .route("/api", get(stream_sql_response))
+        .route_service("/index.js", ServeFile::new("src/index.js"))
         .fallback(get(|| async { Ok::<Html<String>, Infallible>(Html(res)) }))
+        .layer(TraceLayer::new_for_http())
         .with_state(state);
 
     // Run the application
@@ -68,4 +72,3 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-type JsonStream = Pin<Box<dyn Stream<Item = Result<String, AxumError>> + Send>>;

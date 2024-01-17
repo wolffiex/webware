@@ -32,13 +32,14 @@ use tower_http::trace::TraceLayer;
 mod sql;
 mod template;
 use tokio_stream::wrappers::UnboundedReceiverStream;
+use deadpool_postgres::Pool;
 
-use sql::{get_sql_client, send_sql_result};
+use sql::{create_pool, send_sql_result};
 use template::get_page;
 
 #[derive(Clone)]
 pub struct AppState {
-    client: Arc<Client>,
+    client_pool: Arc<Pool>,
 }
 
 #[tokio::main]
@@ -50,10 +51,10 @@ async fn main() -> Result<()> {
     let elapsed = now.elapsed(); // get elapsed time
     println!("Compilation took: {:.2?}", elapsed);
 
-    let sql_client = get_sql_client().await;
+    let client_pool = create_pool().await?;
 
     let state = AppState {
-        client: Arc::new(sql_client),
+        client_pool: Arc::new(client_pool),
     };
 
     // Set up the router and routes
@@ -95,7 +96,7 @@ async fn stream_sql_response(
         UnboundedReceiver<Result<String, anyhow::Error>>,
     ) = unbounded_channel();
 
-    send_sql_result(state.client, sources, tx).await.unwrap();
+    send_sql_result(state.client_pool, sources, tx).await.unwrap();
 
     let rx_stream = UnboundedReceiverStream::new(rx);
     let body = Body::from_stream(rx_stream);

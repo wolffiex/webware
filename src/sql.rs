@@ -26,6 +26,17 @@ use std::sync::Arc;
 use std::{collections::HashMap, time::Duration};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio_postgres::{Client, NoTls};
+use deadpool_postgres::{Runtime, Pool, Config, Manager};
+
+pub async fn create_pool() -> Result<Pool> {
+    let mut cfg = Config::default();
+    cfg.dbname = Some("monitoring".to_string());
+    cfg.user = Some("adam".to_string());
+    cfg.password = Some("adam".to_string());
+    cfg.host = Some("haus".to_string());
+    let pool = cfg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap();
+    Ok(pool)
+}
 
 pub async fn get_sql_client() -> Client {
     // Connect to the database.
@@ -46,7 +57,7 @@ pub async fn get_sql_client() -> Client {
 }
 
 pub async fn send_sql_result(
-    client: Arc<Client>,
+    client_pool: Arc<Pool>,
     sources: Vec<String>,
     tx: UnboundedSender<Result<String, anyhow::Error>>,
 ) -> Result<()> {
@@ -58,6 +69,7 @@ pub async fn send_sql_result(
 
     // Execute the query and get results.
     let sql_params: Vec<String> = vec![];
+    let client = client_pool.get().await?;
     let it = client.query_raw(&sql, sql_params).await?;
 
     // Iterate over the stream to process each row.

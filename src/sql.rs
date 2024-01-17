@@ -24,9 +24,8 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::{collections::HashMap, time::Duration};
-use tokio::sync::mpsc::unbounded_channel;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio_postgres::{Client, NoTls};
-use tokio_stream::wrappers::UnboundedReceiverStream;
 
 pub async fn get_sql_client() -> Client {
     // Connect to the database.
@@ -46,31 +45,20 @@ pub async fn get_sql_client() -> Client {
     client
 }
 
-#[debug_handler]
-pub async fn stream_sql_response(
-    State(state): State<AppState>,
-    Query(params): Query<Vec<(String, String)>>,
-) -> impl IntoResponse {
-    let client = state.client;
+pub async fn send_sql_result(
+    client: Arc<Client>,
+    sources: Vec<String>,
+    tx: UnboundedSender<Result<String, anyhow::Error>>,
+) -> Result<()> {
     // Read the SQL contents from the file.
     let sql =
         fs::read_to_string("project/src/sql/samples.sql").expect("Unable to read the SQL file");
-    let sql_files_content = read_sql_files().unwrap();
+    let sql_files_content = read_sql_files()?;
     // println!("fff {:?}", sql_files_content);
-    let sources: Vec<String> = params
-        .iter()
-        .filter(|(key, _)| key == "source")
-        .map(|(_, value)| value)
-        .cloned()
-        .collect();
 
-    let (tx, rx): (
-        tokio::sync::mpsc::UnboundedSender<Result<String, AxumError>>,
-        tokio::sync::mpsc::UnboundedReceiver<Result<String, AxumError>>,
-    ) = unbounded_channel();
     // Execute the query and get results.
     let sql_params: Vec<String> = vec![];
-    let it = client.query_raw(&sql, sql_params).await.unwrap();
+    let it = client.query_raw(&sql, sql_params).await?;
 
     // Iterate over the stream to process each row.
     let _ = tokio::spawn(it.for_each(move |row_result| {
@@ -83,7 +71,7 @@ pub async fn stream_sql_response(
                     // SSE
                     format!("event: {}\ndata: {}\n\n", eventname, value)
                 })
-                .map_err(AxumError::new);
+                .map_err(anyhow::Error::new);
 
             // tokio::time::sleep(Duration::from_secs(1)).await;
             if let Err(_) = tx1a.send(event) {
@@ -92,28 +80,9 @@ pub async fn stream_sql_response(
             }
         }
     }));
-
-    // let merged_stream = json_stream.merge(js2);
-    // let body = Body::from_stream(merged_stream);
-    // let body = Body::from_stream(select(json_stream, js2));
-
-    // let combined_stream = futures::stream::select(json_stream, js2);
-    // let body = Body::from_stream(combined_stream);
-    let rx_stream = UnboundedReceiverStream::new(rx);
-    let body = Body::from_stream(rx_stream);
-    (
-        // set status code
-        StatusCode::OK,
-        [
-            ("Content-Type", "text/event-stream"),
-            ("x-custom", "custom"),
-        ],
-        // headers with an array
-        body,
-    )
+    Ok(())
 }
 
-type JsonStream = Pin<Box<dyn Stream<Item = Result<Bytes, AxumError>> + Send>>;
 fn read_sql_files() -> Result<HashMap<String, String>> {
     let directory = Path::new("project/src/sql");
     assert!(directory.is_dir());

@@ -25,13 +25,15 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio_postgres::{Client, NoTls};
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 mod sql;
 mod template;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use sql::{get_sql_client, stream_sql_response};
+use sql::{get_sql_client, send_sql_result};
 use template::get_page;
 
 #[derive(Clone)]
@@ -72,4 +74,37 @@ async fn main() -> Result<()> {
     axum::serve(listener, app).await.unwrap();
 
     Ok(())
+}
+
+#[debug_handler]
+async fn stream_sql_response(
+    State(state): State<AppState>,
+    Query(params): Query<Vec<(String, String)>>,
+) -> impl IntoResponse {
+    let sources: Vec<String> = params
+        .iter()
+        .filter_map(|(key, value)| match key.as_str() {
+            "source" => Some(value),
+            _ => None,
+        })
+        .cloned()
+        .collect();
+
+    let (tx, rx): (
+        UnboundedSender<Result<String, anyhow::Error>>,
+        UnboundedReceiver<Result<String, anyhow::Error>>,
+    ) = unbounded_channel();
+
+    send_sql_result(state.client, sources, tx).await.unwrap();
+
+    let rx_stream = UnboundedReceiverStream::new(rx);
+    let body = Body::from_stream(rx_stream);
+    (
+        StatusCode::OK,
+        [
+            ("Content-Type", "text/event-stream"),
+            ("x-custom", "custom"),
+        ],
+        body,
+    )
 }

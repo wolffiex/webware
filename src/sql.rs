@@ -94,7 +94,6 @@ pub async fn stream_sql_response(
         it2.map_ok(|row| {
             let eventname = "stream2";
             let value: Json = row.get(0);
-            println!("foo {}", value);
             // SSE
             format!("event: {}\ndata: {}\n\n", eventname, value)
         })

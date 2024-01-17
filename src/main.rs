@@ -60,7 +60,7 @@ async fn main() -> Result<()> {
     let app = Router::new()
         .nest_service("/www", ServeDir::new("project/www"))
         .route("/api", get(stream_sql_response))
-        .route_service("/index.js", ServeFile::new("src/index.js"))
+        .route_service("/index.js", ServeFile::new("www/index.js"))
         .fallback(get(|| async { Ok::<Html<String>, Infallible>(Html(res)) }))
         .layer(TraceLayer::new_for_http())
         .with_state(state);

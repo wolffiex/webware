@@ -34,7 +34,7 @@ mod template;
 use deadpool_postgres::Pool;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use sql::{create_pool, send_sql_result};
+use sql::{create_pool, send_sql_results};
 use template::get_page;
 
 #[derive(Clone)]
@@ -97,7 +97,7 @@ async fn stream_sql_response(
     ) = unbounded_channel();
 
     tokio::spawn(async move {
-        send_sql_result(state.client_pool, sources, tx)
+        send_sql_results(state.client_pool, sources, tx)
             .await
             .unwrap();
     });

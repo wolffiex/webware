@@ -13,6 +13,7 @@ use axum::{
 };
 use axum_macros::debug_handler;
 use bytes::Bytes;
+use deadpool_postgres::{Config, Manager, Pool, Runtime};
 use futures::stream::select;
 use futures::Stream;
 use futures::TryStreamExt;
@@ -23,10 +24,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::{collections::HashMap, time::Duration};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-use tokio_postgres::{Client, NoTls};
-use deadpool_postgres::{Runtime, Pool, Config, Manager};
+use tokio_postgres::{Client, NoTls, RowStream};
 
 pub async fn create_pool() -> Result<Pool> {
     let mut cfg = Config::default();
@@ -60,39 +61,64 @@ pub async fn send_sql_result(
     client_pool: Arc<Pool>,
     sources: Vec<String>,
     tx: UnboundedSender<Result<String, anyhow::Error>>,
-) -> Result<()> {
+) -> Result<tokio::task::JoinHandle<()>> {
     // Read the SQL contents from the file.
     let sql =
         fs::read_to_string("project/src/sql/samples.sql").expect("Unable to read the SQL file");
     let sql_files_content = read_sql_files()?;
     // println!("fff {:?}", sql_files_content);
 
-    // Execute the query and get results.
-    let sql_params: Vec<String> = vec![];
-    let client = client_pool.get().await?;
-    let it = client.query_raw(&sql, sql_params).await?;
-
     // Iterate over the stream to process each row.
-    let _ = tokio::spawn(it.for_each(move |row_result| {
-        let tx1a = tx.clone();
-        async move {
-            let event = row_result
-                .map(|row| {
-                    let eventname = "stream1";
-                    let value: Json = row.get(0);
-                    // SSE
-                    format!("event: {}\ndata: {}\n\n", eventname, value)
-                })
-                .map_err(anyhow::Error::new);
+    Ok(tokio::spawn(async move {
+        println!("PP))");
+        // Execute the query and get results.
+        let sql_params: Vec<String> = vec![];
+        let client = client_pool.get().await.unwrap();
+        // let rows = client.query_raw(&sql, sql_params).await.unwrap();
+        let stream = client.query_raw(&sql, sql_params.iter())
+            .await
+            .unwrap();
+        let mut rows = Box::pin(stream);
+        println!("GOUR");
+        while let Some(Ok(row)) = rows.next().await {
+            let eventname = "stream1";
+            let value: Option<Json> = row.get(0);
+            // // let value: Json = row.get(0).expect("Failed to read value");
+            // let value: Json = serde_json::from_value(row.get(0).unwrap()).unwrap();
+            println!("EE {:?}", value.clone());
 
-            // tokio::time::sleep(Duration::from_secs(1)).await;
-            if let Err(_) = tx1a.send(event) {
-                // handle this error as you see fit
-                println!("WHALKJER");
+            if tx.send(Ok(format!(
+                "event: {}\ndata: {}\n\n",
+                eventname,
+                value.unwrap()
+            ))).is_err() {
+                eprintln!("ERRRRRRRR");
             }
         }
-    }));
-    Ok(())
+    }))
+    // .map_err(anyhow::Error::new)
+    // })
+    // it.for_each(move |row_result| {
+    // it.for_each(move |row_result| {
+    //     let tx1a = tx.clone();
+    //     async move {
+    //         let event = row_result
+    //             .map(|row| {
+    //                 let eventname = "stream1";
+    //                 let value: Json = row.get(0);
+    //                 // SSE
+    //                 format!("event: {}\ndata: {}\n\n", eventname, value)
+    //             })
+    //             .map_err(anyhow::Error::new);
+
+    //         // tokio::time::sleep(Duration::from_secs(1)).await;
+    //         if let Err(_) = tx1a.send(event) {
+    //             // handle this error as you see fit
+    //             println!("WHALKJER");
+    //         }
+    //     }
+    // })
+    // }.await))
 }
 
 fn read_sql_files() -> Result<HashMap<String, String>> {

@@ -31,8 +31,8 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 mod sql;
 mod template;
-use tokio_stream::wrappers::UnboundedReceiverStream;
 use deadpool_postgres::Pool;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 
 use sql::{create_pool, send_sql_result};
 use template::get_page;
@@ -96,7 +96,10 @@ async fn stream_sql_response(
         UnboundedReceiver<Result<String, anyhow::Error>>,
     ) = unbounded_channel();
 
-    send_sql_result(state.client_pool, sources, tx).await.unwrap();
+    let join_handle = send_sql_result(state.client_pool, sources, tx);
+    tokio::spawn(async move {
+        join_handle.await
+    });
 
     let rx_stream = UnboundedReceiverStream::new(rx);
     let body = Body::from_stream(rx_stream);

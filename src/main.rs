@@ -8,7 +8,8 @@ use axum::{
     extract::Query,
     extract::State,
     http::StatusCode,
-    response::{Html, IntoResponse, Redirect},
+    http::Uri,
+    response::{Html, IntoResponse, Redirect, Response},
     routing::get,
     Error as AxumError, Router,
 };
@@ -25,7 +26,10 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::{
+    mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+    RwLock,
+};
 use tokio_postgres::{Client, NoTls};
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
@@ -41,28 +45,19 @@ use template::TemplateCollection;
 #[derive(Clone)]
 pub struct AppState {
     client_pool: Arc<Pool>,
+    templates: Arc<RwLock<TemplateCollection>>,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
-    let mut templates = TemplateCollection::new(PathBuf::from("project/src/templates"));
-    let now = Instant::now(); // get current time
-
-    let res = templates.get_page("/weather".to_string());
-    let elapsed = now.elapsed(); // get elapsed time
-    println!("Compilation took: {:.2?}", elapsed);
-
-    let now = Instant::now(); // get current time
-
-    let res = templates.get_page("/weather".to_string());
-    let elapsed = now.elapsed(); // get elapsed time
-    println!("second one took: {:.2?}", elapsed);
 
     let client_pool = create_pool().await?;
-
     let state = AppState {
         client_pool: Arc::new(client_pool),
+        templates: Arc::new(RwLock::new(TemplateCollection::new(PathBuf::from(
+            "project/src/templates",
+        )))),
     };
 
     // Set up the router and routes
@@ -74,7 +69,7 @@ async fn main() -> Result<()> {
             "/favicon.ico",
             get(|| async { Redirect::permanent("/www/images/favicon.ico") }),
         )
-        .fallback(get(|| async { Ok::<Html<String>, Infallible>(Html(res)) }))
+        .fallback(get(template_response))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
@@ -83,6 +78,26 @@ async fn main() -> Result<()> {
     axum::serve(listener, app).await.unwrap();
 
     Ok(())
+}
+
+#[debug_handler]
+async fn template_response(uri: Uri, State(state): State<AppState>) -> Response {
+    {
+        let mut templates_w = state.templates.write().await;
+        templates_w.check().unwrap();
+    }
+    let templates = state.templates.read().await;
+    match templates.get_page(uri.to_string()) {
+        Ok(response) => Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "text/html")
+            .body(Body::from(response))
+            .unwrap(),
+        Err(e) => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from(e.to_string()))
+            .unwrap(),
+    }
 }
 
 #[debug_handler]

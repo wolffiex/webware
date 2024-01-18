@@ -13,7 +13,9 @@ use std::fs::File;
 use std::io::{self, BufReader};
 use std::iter::Flatten;
 use std::path::PathBuf;
+use std::time::Instant;
 
+use crate::cache::compute_cache_key;
 use crate::cache::DirectoryCache;
 
 fn to_utf8(html_string: HtmlString) -> Result<String> {
@@ -59,6 +61,12 @@ impl Route {
             }
         }
         Err(anyhow::anyhow!("No match for path {}", url_path))
+    }
+    fn get_files(&self) -> Vec<String> {
+        self.paths
+            .iter()
+            .filter_map(|path| path.get("file").map(|s| s.to_owned()))
+            .collect()
     }
 }
 
@@ -235,58 +243,82 @@ impl Template {
 
 pub struct TemplateCollection {
     directory: PathBuf,
-    cache: DirectoryCache<Template>,
+    cache_key: u64,
+    cache: HashMap<String, Template>,
 }
 
 impl TemplateCollection {
-    pub fn new(directory: PathBuf) -> TemplateCollection {
+    pub fn new(directory: PathBuf) -> Self {
         let dir_clone = directory.clone();
-        TemplateCollection {
+        let mut collection = TemplateCollection {
             directory,
-            cache: DirectoryCache::new(dir_clone),
+            cache_key: 0,
+            cache: HashMap::new(),
+        };
+        collection.check().expect("Failed to parse templates");
+        collection
+    }
+
+    pub fn check(&mut self) -> Result<()> {
+        let new_key = compute_cache_key(&self.directory).unwrap();
+        if self.cache_key != new_key {
+            self.cache_key = new_key;
+            self.compile_templates()?;
         }
+        Ok(())
     }
 
-    fn compile_template(&self, file_name: &String) -> Result<Template> {
-        let mut path = self.directory.clone();
-        path.push(file_name);
-        let file = File::open(path.clone())
-            .with_context(|| format!("Failed to open file {}", path.display()))?;
-        let reader = BufReader::new(file);
-        let tokenizer = Tokenizer::new(IoReader::new(reader)).flatten();
-        Template::compile(tokenizer)
-    }
-
-    fn get_template(&mut self, file_name: String) -> &Template {
-        self.cache.get_or_insert(file_name.clone(), || {
+    fn compile_templates(&mut self) -> Result<()> {
+        let now = Instant::now(); // get current time
+        let mut files = vec!["index.html".to_string()];
+        self.cache = HashMap::new();
+        while !files.is_empty() {
+            let file_name = files.pop().unwrap();
             let mut path = self.directory.clone();
-            println!("Cache miss {}", file_name);
-            path.push(file_name);
-            let file = File::open(path.clone()).unwrap();
+            path.push(file_name.to_string());
+            let file = File::open(path.clone())
+                .with_context(|| format!("Failed to open file {}", path.display()))?;
             let reader = BufReader::new(file);
             let tokenizer = Tokenizer::new(IoReader::new(reader)).flatten();
-            Template::compile(tokenizer).unwrap()
-        })
+            let template = Template::compile(tokenizer)?;
+            for part in &template.parts {
+                match part {
+                    TemplatePart::Embed(file_name) => files.push(file_name.to_string()),
+                    TemplatePart::Route(route) => files.extend(route.get_files()),
+                    _ => (),
+                }
+            }
+            self.cache.insert(file_name, template);
+        }
+        let elapsed = now.elapsed(); // get elapsed time
+        println!("Template compilation took {:?}", elapsed);
+        Ok(())
     }
 
-    pub fn get_page(&mut self, mut url_path: String) -> String {
+    pub fn get_page(&self, mut url_path: String) -> Result<String> {
         let mut page = Page {
             parts: Vec::new(),
             sources: HashSet::new(),
         };
-        self.collect_parts(&mut url_path, "index.html".to_string(), &mut page);
-        page.render()
+        self.collect_parts(&mut url_path, "index.html".to_string(), &mut page)?;
+        Ok(page.render())
     }
 
-    fn collect_parts(&mut self, url_path: &mut String, file_name: String, page: &mut Page) {
-        let template = self.get_template(file_name);
+    fn collect_parts(
+        &self,
+        url_path: &mut String,
+        file_name: String,
+        page: &mut Page,
+    ) -> Result<()> {
+        let template = self.cache.get(&file_name).unwrap();
         for part in template.parts.clone() {
-            if let Some(file_name) = self.resolve_reference(url_path, &part).unwrap() {
-                self.collect_parts(url_path, file_name, page)
+            if let Some(file_name) = self.resolve_reference(url_path, &part)? {
+                self.collect_parts(url_path, file_name, page)?
             } else {
                 page.push_part(part);
             }
         }
+        Ok(())
     }
 
     fn resolve_reference(

@@ -7,7 +7,7 @@ use std::path::Path;
 use std::time::UNIX_EPOCH;
 use std::{collections::HashMap, path::PathBuf};
 
-fn compute_cache_key(directory: &PathBuf) -> Result<u64> {
+pub fn compute_cache_key(directory: &PathBuf) -> Result<u64> {
     let entries: Vec<_> = fs::read_dir(directory)?
         .map(|res| res.map(|e| e.path()))
         .collect::<Result<Vec<_>, std::io::Error>>()

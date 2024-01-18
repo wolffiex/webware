@@ -83,8 +83,10 @@ async fn main() -> Result<()> {
 #[debug_handler]
 async fn template_response(uri: Uri, State(state): State<AppState>) -> Response {
     {
-        let mut templates_w = state.templates.write().await;
-        templates_w.check().unwrap();
+        if state.templates.read().await.check() {
+            let mut templates_w = state.templates.write().await;
+            templates_w.recompile().unwrap();
+        }
     }
     let templates = state.templates.read().await;
     match templates.get_page(uri.to_string()) {

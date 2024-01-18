@@ -255,11 +255,16 @@ impl TemplateCollection {
             cache_key: 0,
             cache: HashMap::new(),
         };
-        collection.check().expect("Failed to parse templates");
+        collection.recompile().expect("Failed to parse templates");
         collection
     }
 
-    pub fn check(&mut self) -> Result<()> {
+    pub fn check(&self) -> bool {
+        let new_key = compute_cache_key(&self.directory).unwrap();
+        self.cache_key != new_key
+    }
+
+    pub fn recompile(&mut self) -> Result<()> {
         let new_key = compute_cache_key(&self.directory).unwrap();
         if self.cache_key != new_key {
             self.cache_key = new_key;

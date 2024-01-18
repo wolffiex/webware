@@ -36,7 +36,6 @@ use deadpool_postgres::Pool;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 use sql::{create_pool, send_sql_results};
-use template::get_page;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -48,7 +47,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let now = Instant::now(); // get current time
 
-    let res = get_page("/weather".into(), PathBuf::from("project/src/templates"))?;
+    let res = "Foo".to_string(); //get_page("/weather".into(), PathBuf::from("project/src/templates"))?;
     let elapsed = now.elapsed(); // get elapsed time
     println!("Compilation took: {:.2?}", elapsed);
 

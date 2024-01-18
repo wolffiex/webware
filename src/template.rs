@@ -41,7 +41,7 @@ fn is_void_element(tag_name: &String) -> bool {
     )
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Route {
     paths: Vec<BTreeMap<String, String>>,
 }
@@ -68,7 +68,7 @@ pub struct Template {
     partial_route: Option<Route>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum TemplatePart {
     Content(String),
     HeadInjection,
@@ -249,70 +249,92 @@ impl TemplateCollection {
         Template::compile(tokenizer)
     }
 
-    fn get_index(&self) -> Result<Template> {
-        let index_html = "index.html".to_string();
-        self.compile_template(&index_html)
-    }
-
-    fn get(&mut self, file_name: String) -> &Template {
-        let name_clone = file_name.clone();
-        self.cache.get_or_insert(file_name, || {
+    fn get_template(&mut self, file_name: String) -> &Template {
+        self.cache.get_or_insert(file_name.clone(), || {
             let mut path = self.directory.clone();
-            path.push(name_clone);
+            println!("Cache miss {}", file_name);
+            path.push(file_name);
             let file = File::open(path.clone()).unwrap();
             let reader = BufReader::new(file);
             let tokenizer = Tokenizer::new(IoReader::new(reader)).flatten();
             Template::compile(tokenizer).unwrap()
         })
     }
-}
-pub fn get_page(url_path: String, directory: PathBuf) -> Result<String> {
-    let dir_clone = directory.clone();
-    let mut collection = TemplateCollection {
-        directory,
-        cache: DirectoryCache::new(dir_clone),
-    };
-    Page::build(url_path, &mut collection)
+
+    pub fn get_page(&mut self, url_path: &mut String) -> String {
+        let mut page = Page {
+            state: PageMachine::PreHead,
+            pre_head: String::new(),
+            post_head: String::new(),
+            post_body: String::new(),
+            sources: HashSet::new(),
+        };
+        self.collect_parts(url_path, "index.html".to_string(), &mut page);
+        page.render()
+    }
+
+    fn collect_parts(&mut self, url_path: &mut String, file_name: String, page: &mut Page) {
+        let template = self.get_template(file_name);
+        for part in &template.parts.clone() {
+            if let Some(file_name) = self.resolve_reference(url_path, part).unwrap() {
+                self.collect_parts(url_path, file_name, page)
+            } else {
+                page.handle_part(part);
+            }
+        }
+    }
+
+    fn resolve_reference(&self, url_path: &mut String, part: &TemplatePart) -> Result<Option<String>> {
+        match part {
+            TemplatePart::Embed(file_name) => Ok(Some(file_name.to_string())),
+            TemplatePart::Route(route) => route.match_path(url_path).map(|s| Some(s.to_owned())),
+            _ => Ok(None),
+        }
+    }
+
 }
 
+enum PageMachine {
+    PreHead,
+    PostHead,
+    PostBody,
+}
 struct Page {
-    html: String,
+    state: PageMachine,
+    pre_head: String,
+    post_head: String,
+    post_body: String,
     sources: HashSet<String>,
 }
 
 impl Page {
-    fn build(url_path: String, collection: &mut TemplateCollection) -> Result<String> {
-        let mut page = Page {
-            html: String::new(),
-            sources: HashSet::new(),
-        };
-        page.collect(&mut url_path.clone(), &"index.html".to_string(), collection)?;
-        page.process_template(&mut url_path.clone(), &"index.html".to_string(), collection)?;
-        println!("SROUE {:?}", page.sources);
-        Ok(page.html)
-    }
-
-    fn collect(
-        &mut self,
-        url_path: &mut String,
-        file_name: &String,
-        collection: &TemplateCollection,
-    ) -> Result<()> {
-        let template = collection.compile_template(&file_name)?;
-        for part in &template.parts {
-            if let Some(file_name) = Page::resolve_reference(url_path, part)? {
-                println!("Wanttoefome {}", file_name);
-                self.collect(url_path, &file_name, collection)?;
-            } else if let TemplatePart::Source(name) = part {
-                self.sources.insert(name.to_owned());
+    fn handle_part(&mut self, part: &TemplatePart) {
+        match part {
+            TemplatePart::Content(s) => match self.state {
+                PageMachine::PreHead => self.pre_head.push_str(s),
+                PageMachine::PostHead => self.post_head.push_str(s),
+                PageMachine::PostBody => self.post_body.push_str(s),
+            },
+            TemplatePart::HeadInjection => self.state = PageMachine::PostHead,
+            TemplatePart::BodyInjection => self.state = PageMachine::PostBody,
+            TemplatePart::Source(name) => {
+                self.sources.insert(name.to_string());
             }
-        }
-        Ok(())
+            _ => unreachable!(),
+        };
     }
 
-    fn inject_head(&mut self) {
+    fn render(&self) -> String {
+        let mut html = String::new();
+        html.push_str(&self.pre_head);
+        html.push_str(&self.inject_head());
+        html.push_str(&self.post_head);
+        html
+    }
+
+    fn inject_head(&self) -> String {
         let sources_json = serde_json::to_string(&self.sources).unwrap_or("[]".into());
-        self.html.push_str(&format!(
+        format!(
             r#"
             <script>
               const sources = {}
@@ -348,42 +370,10 @@ impl Page {
             </script>
         "#,
             sources_json
-        ));
+        )
     }
 
-    fn inject_body(&mut self) {
-        self.html
-            .push_str(r#"<script type="module" src="index.js"></script>"#);
-    }
-
-    fn process_template(
-        &mut self,
-        url_path: &mut String,
-        template_file_name: &String,
-        collection: &TemplateCollection,
-    ) -> Result<()> {
-        let template = collection.compile_template(template_file_name)?;
-        for part in &template.parts {
-            if let Some(file_name) = Page::resolve_reference(url_path, part)? {
-                self.process_template(url_path, &file_name, collection)?;
-            } else {
-                match part {
-                    TemplatePart::Content(s) => self.html.push_str(s),
-                    TemplatePart::HeadInjection => self.inject_head(),
-                    TemplatePart::BodyInjection => self.inject_body(),
-                    TemplatePart::Source(_) => (),
-                    _ => unreachable!(),
-                };
-            }
-        }
-        Ok(())
-    }
-
-    fn resolve_reference(url_path: &mut String, part: &TemplatePart) -> Result<Option<String>> {
-        match part {
-            TemplatePart::Embed(file_name) => Ok(Some(file_name.to_string())),
-            TemplatePart::Route(route) => route.match_path(url_path).map(|s| Some(s.to_owned())),
-            _ => Ok(None),
-        }
+    fn inject_body(&mut self) -> &str {
+        r#"<script type="module" src="index.js"></script>"#
     }
 }

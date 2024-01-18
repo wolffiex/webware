@@ -5,10 +5,12 @@ use anyhow::Context;
 use anyhow::Result;
 use html5gum::Doctype;
 use html5gum::{HtmlString, IoReader, StartTag, Token, Tokenizer};
+use rayon::prelude::*;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fmt::Write;
+use std::fs;
 use std::fs::File;
 use std::io::{self, BufReader};
 use std::iter::Flatten;
@@ -275,26 +277,28 @@ impl TemplateCollection {
 
     fn compile_templates(&mut self) -> Result<()> {
         let now = Instant::now(); // get current time
-        let mut files = vec!["index.html".to_string()];
-        self.cache = HashMap::new();
-        while !files.is_empty() {
-            let file_name = files.pop().unwrap();
-            let mut path = self.directory.clone();
-            path.push(file_name.to_string());
-            let file = File::open(path.clone())
-                .with_context(|| format!("Failed to open file {}", path.display()))?;
-            let reader = BufReader::new(file);
-            let tokenizer = Tokenizer::new(IoReader::new(reader)).flatten();
-            let template = Template::compile(tokenizer)?;
-            for part in &template.parts {
-                match part {
-                    TemplatePart::Embed(file_name) => files.push(file_name.to_string()),
-                    TemplatePart::Route(route) => files.extend(route.get_files()),
-                    _ => (),
-                }
-            }
-            self.cache.insert(file_name, template);
-        }
+        let entries: Vec<_> = fs::read_dir(self.directory.clone())?
+            .map(|res| res.map(|e| e.path()))
+            .collect::<Result<Vec<_>, std::io::Error>>()?;
+
+        self.cache = entries
+            .into_par_iter()
+            .map(|path_buf| {
+                let file = File::open(path_buf.clone())
+                    .with_context(|| format!("Failed to open file {}", path_buf.display()))?;
+                let reader = BufReader::new(file);
+                let tokenizer = Tokenizer::new(IoReader::new(reader)).flatten();
+                let template = Template::compile(tokenizer)?;
+                let fname = path_buf
+                    .strip_prefix(&self.directory)?
+                    .to_path_buf()
+                    .into_os_string()
+                    .to_string_lossy()
+                    .to_string();
+                Ok((fname, template))
+            })
+            .collect::<Result<HashMap<String, Template>>>()?;
+
         let elapsed = now.elapsed(); // get elapsed time
         println!("Template compilation took {:?}", elapsed);
         Ok(())

@@ -10,8 +10,7 @@ use std::{collections::HashMap, path::PathBuf};
 pub fn compute_cache_key(directory: &PathBuf) -> Result<u64> {
     let entries: Vec<_> = fs::read_dir(directory)?
         .map(|res| res.map(|e| e.path()))
-        .collect::<Result<Vec<_>, std::io::Error>>()
-        .map_err(|e| anyhow!("Failed to read directory entries: {:?}", e))?;
+        .collect::<Result<Vec<_>, std::io::Error>>()?;
 
     let mut fs_info: Vec<(u64, String)> = entries
         .into_par_iter()

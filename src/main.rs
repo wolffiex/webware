@@ -39,7 +39,7 @@ mod template;
 use deadpool_postgres::Pool;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use sql::{create_pool, send_sql_results};
+use sql::{create_pool, send_sql_results, StatementCollection};
 use template::TemplateCollection;
 
 #[derive(Clone)]
@@ -53,12 +53,16 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     let client_pool = create_pool().await?;
+    let mut statements = StatementCollection::new(PathBuf::from("project/src/sql"));
     let state = AppState {
         client_pool: Arc::new(client_pool),
         templates: Arc::new(RwLock::new(TemplateCollection::new(PathBuf::from(
             "project/src/templates",
         )))),
     };
+    statements
+        .prepare_statements(state.client_pool.clone())
+        .await?;
 
     // Set up the router and routes
     let app = Router::new()

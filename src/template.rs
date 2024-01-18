@@ -250,14 +250,11 @@ pub struct TemplateCollection {
 
 impl TemplateCollection {
     pub fn new(directory: PathBuf) -> Self {
-        let dir_clone = directory.clone();
-        let mut collection = TemplateCollection {
+        TemplateCollection {
             directory,
             cache_key: 0,
             cache: HashMap::new(),
-        };
-        collection.recompile().expect("Failed to parse templates");
-        collection
+        }
     }
 
     pub fn check(&self) -> bool {

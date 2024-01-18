@@ -233,12 +233,20 @@ impl Template {
     }
 }
 
-struct TemplateCollection {
+pub struct TemplateCollection {
     directory: PathBuf,
     cache: DirectoryCache<Template>,
 }
 
 impl TemplateCollection {
+    pub fn new(directory: PathBuf) -> TemplateCollection {
+        let dir_clone = directory.clone();
+        TemplateCollection {
+            directory,
+            cache: DirectoryCache::new(dir_clone),
+        }
+    }
+
     fn compile_template(&self, file_name: &String) -> Result<Template> {
         let mut path = self.directory.clone();
         path.push(file_name);
@@ -261,12 +269,12 @@ impl TemplateCollection {
         })
     }
 
-    pub fn get_page(&mut self, url_path: &mut String) -> String {
+    pub fn get_page(&mut self, mut url_path: String) -> String {
         let mut page = Page {
             parts: Vec::new(),
             sources: HashSet::new(),
         };
-        self.collect_parts(url_path, "index.html".to_string(), &mut page);
+        self.collect_parts(&mut url_path, "index.html".to_string(), &mut page);
         page.render()
     }
 

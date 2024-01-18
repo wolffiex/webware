@@ -36,6 +36,7 @@ use deadpool_postgres::Pool;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 use sql::{create_pool, send_sql_results};
+use template::TemplateCollection;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -45,11 +46,18 @@ pub struct AppState {
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
+    let mut templates = TemplateCollection::new(PathBuf::from("project/src/templates"));
     let now = Instant::now(); // get current time
 
-    let res = "Foo".to_string(); //get_page("/weather".into(), PathBuf::from("project/src/templates"))?;
+    let res = templates.get_page("/weather".to_string());
     let elapsed = now.elapsed(); // get elapsed time
     println!("Compilation took: {:.2?}", elapsed);
+
+    let now = Instant::now(); // get current time
+
+    let res = templates.get_page("/weather".to_string());
+    let elapsed = now.elapsed(); // get elapsed time
+    println!("second one took: {:.2?}", elapsed);
 
     let client_pool = create_pool().await?;
 
@@ -60,7 +68,7 @@ async fn main() -> Result<()> {
     // Set up the router and routes
     let app = Router::new()
         .nest_service("/www", ServeDir::new("project/www"))
-        .route("/api", get(stream_sql_response))
+        // .route("/api", get(stream_sql_response))
         .route_service("/index.js", ServeFile::new("www/index.js"))
         .route(
             "/favicon.ico",

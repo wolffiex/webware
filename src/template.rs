@@ -18,7 +18,6 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use crate::cache::compute_cache_key;
-use crate::cache::DirectoryCache;
 
 fn to_utf8(html_string: HtmlString) -> Result<String> {
     Ok(String::from_utf8(html_string.0)?)

@@ -43,28 +43,3 @@ pub fn compute_cache_key(directory: &PathBuf) -> Result<u64> {
 
     Ok(hasher.finish())
 }
-
-pub struct DirectoryCache<T> {
-    directory: PathBuf,
-    current_key: u64,
-    _storage: HashMap<String, T>,
-}
-
-impl<T> DirectoryCache<T> {
-    pub fn new(directory: PathBuf) -> DirectoryCache<T> {
-        DirectoryCache {
-            directory,
-            current_key: 0,
-            _storage: HashMap::new(),
-        }
-    }
-
-    pub fn get_or_insert<F: FnOnce() -> T>(&mut self, key: String, inserter: F) -> &T {
-        let new_key = compute_cache_key(&self.directory).unwrap();
-        if self.current_key != new_key {
-            self.current_key = new_key;
-            self._storage = HashMap::new();
-        }
-        self._storage.entry(key).or_insert_with(inserter)
-    }
-}

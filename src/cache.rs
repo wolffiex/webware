@@ -53,22 +53,12 @@ pub struct DirectoryCache<T> {
 }
 
 impl<T> DirectoryCache<T> {
-    fn check(&mut self) -> &HashMap<String, T> {
+    pub fn get_or_insert<F: FnOnce() -> T>(&mut self, key: String, inserter: F) -> &T {
         let new_key = compute_cache_key(&self.directory).unwrap();
         if self.current_key != new_key {
             self.current_key = new_key;
             self._storage = HashMap::new();
         }
-        &self._storage
-    }
-
-    pub fn get(&mut self, key: &String) -> Option<&T> {
-        self.check().get(key)
-    }
-
-    pub fn put(&mut self, key: String, value: T) -> &T {
-        self.check();
-        let hh = self._storage.insert(key.to_string(), value);
-        self._storage.get(&key).unwrap()
+        self._storage.entry(key).or_insert_with(inserter)
     }
 }

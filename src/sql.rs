@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(unused_imports)]
-use crate::AppState;
+use crate::{AppState, cache::compute_cache_key};
 use anyhow::Result;
 use axum::{
     body::Body,
@@ -47,6 +47,7 @@ pub async fn create_pool() -> Result<Pool> {
 type ResultSender = UnboundedSender<Result<String, anyhow::Error>>;
 pub async fn send_sql_results(
     client_pool: Arc<Pool>,
+    statements: &StatementCollection,
     sources: Vec<String>,
     tx: ResultSender,
 ) -> Result<()> {
@@ -102,6 +103,20 @@ impl StatementCollection {
             cache_key: 0,
             cache: HashMap::new(),
         }
+    }
+
+    pub fn check(&self) -> bool {
+        let new_key = compute_cache_key(&self.directory).unwrap();
+        self.cache_key != new_key
+    }
+
+    pub async fn recompile(&mut self, client_pool: Arc<Pool>) -> Result<()> {
+        let new_key = compute_cache_key(&self.directory).unwrap();
+        if self.cache_key != new_key {
+            self.cache_key = new_key;
+            self.prepare_statements(client_pool).await?;
+        }
+        Ok(())
     }
 
     pub async fn prepare_statements(&mut self, client_pool: Arc<Pool>) -> Result<()> {

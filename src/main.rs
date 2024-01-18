@@ -46,6 +46,7 @@ use template::TemplateCollection;
 pub struct AppState {
     client_pool: Arc<Pool>,
     templates: Arc<RwLock<TemplateCollection>>,
+    statements: Arc<RwLock<StatementCollection>>,
 }
 
 #[tokio::main]
@@ -53,21 +54,18 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     let client_pool = create_pool().await?;
-    let mut statements = StatementCollection::new(PathBuf::from("project/src/sql"));
     let state = AppState {
         client_pool: Arc::new(client_pool),
         templates: Arc::new(RwLock::new(TemplateCollection::new(PathBuf::from(
             "project/src/templates",
         )))),
+        statements : Arc::new(RwLock::new(StatementCollection::new(PathBuf::from("project/src/sql")))),
     };
-    statements
-        .prepare_statements(state.client_pool.clone())
-        .await?;
 
     // Set up the router and routes
     let app = Router::new()
         .nest_service("/www", ServeDir::new("project/www"))
-        // .route("/api", get(stream_sql_response))
+        .route("/api", get(stream_sql_response))
         .route_service("/index.js", ServeFile::new("www/index.js"))
         .route(
             "/favicon.ico",
@@ -124,9 +122,16 @@ async fn stream_sql_response(
         UnboundedSender<Result<String, anyhow::Error>>,
         UnboundedReceiver<Result<String, anyhow::Error>>,
     ) = unbounded_channel();
+    {
+        if state.statements.read().await.check() {
+            let mut statements_w = state.statements.write().await;
+            statements_w.recompile(state.client_pool.clone()).await.unwrap();
+        }
+    }
 
     tokio::spawn(async move {
-        send_sql_results(state.client_pool, sources, tx)
+        let statements = state.statements.read().await;
+        send_sql_results(state.client_pool, &statements, sources, tx)
             .await
             .unwrap();
     });

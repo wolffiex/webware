@@ -14,6 +14,8 @@ use std::io::{self, BufReader};
 use std::iter::Flatten;
 use std::path::PathBuf;
 
+use crate::cache::DirectoryCache;
+
 fn to_utf8(html_string: HtmlString) -> Result<String> {
     Ok(String::from_utf8(html_string.0)?)
 }
@@ -231,19 +233,13 @@ impl Template {
     }
 }
 
-pub fn compile_template(source: &PathBuf) -> Result<Template> {
-    let file = File::open(source)?;
-    let reader = BufReader::new(file);
-    let tokenizer = Tokenizer::new(IoReader::new(reader)).flatten();
-    Template::compile(tokenizer)
-}
-
 struct TemplateCollection {
     directory: PathBuf,
+    cache: DirectoryCache<Template>,
 }
 
 impl TemplateCollection {
-    pub fn compile_template(&self, file_name: &String) -> Result<Template> {
+    fn compile_template(&self, file_name: &String) -> Result<Template> {
         let mut path = self.directory.clone();
         path.push(file_name);
         let file = File::open(path.clone())
@@ -257,10 +253,26 @@ impl TemplateCollection {
         let index_html = "index.html".to_string();
         self.compile_template(&index_html)
     }
+
+    fn get(&mut self, file_name: String) -> &Template {
+        let name_clone = file_name.clone();
+        self.cache.get_or_insert(file_name, || {
+            let mut path = self.directory.clone();
+            path.push(name_clone);
+            let file = File::open(path.clone()).unwrap();
+            let reader = BufReader::new(file);
+            let tokenizer = Tokenizer::new(IoReader::new(reader)).flatten();
+            Template::compile(tokenizer).unwrap()
+        })
+    }
 }
 pub fn get_page(url_path: String, directory: PathBuf) -> Result<String> {
-    let collection = TemplateCollection { directory };
-    Page::build(url_path, &collection)
+    let dir_clone = directory.clone();
+    let mut collection = TemplateCollection {
+        directory,
+        cache: DirectoryCache::new(dir_clone),
+    };
+    Page::build(url_path, &mut collection)
 }
 
 struct Page {
@@ -269,13 +281,12 @@ struct Page {
 }
 
 impl Page {
-    fn build(url_path: String, collection: &TemplateCollection) -> Result<String> {
-        let index_template = collection.get_index()?;
+    fn build(url_path: String, collection: &mut TemplateCollection) -> Result<String> {
         let mut page = Page {
             html: String::new(),
             sources: HashSet::new(),
         };
-        page.collect(&mut url_path.clone(), &index_template, collection)?;
+        page.collect(&mut url_path.clone(), &"index.html".to_string(), collection)?;
         page.process_template(&mut url_path.clone(), &"index.html".to_string(), collection)?;
         println!("SROUE {:?}", page.sources);
         Ok(page.html)
@@ -284,14 +295,14 @@ impl Page {
     fn collect(
         &mut self,
         url_path: &mut String,
-        template: &Template,
+        file_name: &String,
         collection: &TemplateCollection,
     ) -> Result<()> {
+        let template = collection.compile_template(&file_name)?;
         for part in &template.parts {
             if let Some(file_name) = Page::resolve_reference(url_path, part)? {
                 println!("Wanttoefome {}", file_name);
-                let template = collection.compile_template(&file_name)?;
-                self.collect(url_path, &template, collection)?;
+                self.collect(url_path, &file_name, collection)?;
             } else if let TemplatePart::Source(name) = part {
                 self.sources.insert(name.to_owned());
             }

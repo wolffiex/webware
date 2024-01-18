@@ -35,7 +35,6 @@ mod template;
 use deadpool_postgres::Pool;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use cache::compute_cache_key;
 use sql::{create_pool, send_sql_results};
 use template::get_page;
 
@@ -46,12 +45,6 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let now = Instant::now(); // get current time
-    let hk = compute_cache_key(&PathBuf::from("project/src/sql"));
-    let elapsed = now.elapsed(); // get elapsed time
-    println!("KK took: {:.2?}", elapsed);
-    println!("KK {:?}", hk);
-
     tracing_subscriber::fmt::init();
     let now = Instant::now(); // get current time
 

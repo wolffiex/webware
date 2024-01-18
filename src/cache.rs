@@ -7,9 +7,7 @@ use std::path::Path;
 use std::time::UNIX_EPOCH;
 use std::{collections::HashMap, path::PathBuf};
 
-use std::collections::hash_map::DefaultHasher;
-
-pub fn compute_cache_key(directory: &PathBuf) -> Result<u64> {
+fn compute_cache_key(directory: &PathBuf) -> Result<u64> {
     let entries: Vec<_> = fs::read_dir(directory)?
         .map(|res| res.map(|e| e.path()))
         .collect::<Result<Vec<_>, std::io::Error>>()
@@ -53,6 +51,14 @@ pub struct DirectoryCache<T> {
 }
 
 impl<T> DirectoryCache<T> {
+    pub fn new(directory: PathBuf) -> DirectoryCache<T> {
+        DirectoryCache {
+            directory,
+            current_key: 0,
+            _storage: HashMap::new(),
+        }
+    }
+
     pub fn get_or_insert<F: FnOnce() -> T>(&mut self, key: String, inserter: F) -> &T {
         let new_key = compute_cache_key(&self.directory).unwrap();
         if self.current_key != new_key {

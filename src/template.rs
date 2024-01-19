@@ -155,10 +155,10 @@ impl Template {
     fn handle_start_tag(&mut self, tag: StartTag) -> Result<Vec<TemplatePart>> {
         let tag_name = to_utf8(tag.name)?;
         self.push_tag(&tag_name);
-        let mut attrs = BTreeMap::new();
-        for (key, value) in tag.attributes.into_iter() {
-            attrs.insert(to_utf8(key)?, to_utf8(value)?);
-        }
+        let attrs: BTreeMap<_, _> = tag.attributes
+            .into_iter()
+            .map(|(key, value)| Ok((to_utf8(key)?, to_utf8(value)?)))
+            .collect::<Result<_>>()?;
         let result: Result<Vec<TemplatePart>> = match tag_name.as_str() {
             "x-route" => {
                 assert!(self.partial_route.is_none());
@@ -201,8 +201,8 @@ impl Template {
         }
         for (attr_name, attr_value) in attributes {
             match attr_name.as_str() {
-                ":source" => parts.push(TemplatePart::Source(attr_value)),
-                value if value.starts_with(':') => {
+                "x-source" => parts.push(TemplatePart::Source(attr_value)),
+                value if value.starts_with("x-") => {
                     println!("ATR {} {}", attr_name, attr_value);
                 }
                 _ => {

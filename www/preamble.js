@@ -14,7 +14,9 @@ eventSource.onmessage = e => {
   if (resolver) resolver()
 };
 window.apiEventSource = async function*() {
+  console.log('in', eventBuffer);
   while (streamRunning || eventBuffer.length) {
+    console.log('inlooo', eventBuffer);
     if (eventBuffer.length > 0) {
       yield eventBuffer.shift();
     } else {

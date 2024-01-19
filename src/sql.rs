@@ -51,7 +51,6 @@ pub async fn send_sql_results(
     sources: Vec<String>,
     tx: ResultSender,
 ) -> Result<()> {
-    println!("sour: {:?}", sources);
     futures::stream::iter(sources.into_iter())
         .for_each_concurrent(None, |source| {
             let tx_clone = tx.clone();

@@ -136,12 +136,12 @@ async fn stream_sql_response(
 
     tokio::spawn(async move {
         let statements = state.statements.read().await;
-        send_sql_results(state.client_pool, &statements, sources, tx.clone())
-            .await
-            .unwrap();
-        match tx.send(Ok("event: stream_stop\ndata: \n\n".to_string())) {
-            Ok(_) => tokio::time::sleep(tokio::time::Duration::from_millis(100)).await,
-            Err(e) => eprintln!("Final message send failed {}", e),
+        match send_sql_results(state.client_pool, &statements, sources, tx.clone()).await {
+            Ok(_) => match tx.send(Ok("event: stream_stop\ndata: \n\n".to_string())) {
+                Ok(_) => tokio::time::sleep(tokio::time::Duration::from_millis(100)).await,
+                Err(e) => eprintln!("Final message send failed {}", e),
+            },
+            Err(e) => eprintln!("SQL result send failed: {e}"),
         }
     });
 

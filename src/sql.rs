@@ -27,6 +27,7 @@ use std::fs::File;
 use std::io::{self, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Instant;
@@ -51,17 +52,25 @@ pub async fn send_sql_results(
     sources: Vec<String>,
     tx: ResultSender,
 ) -> Result<()> {
+    let error_signal = Arc::new(AtomicBool::new(false));
     futures::stream::iter(sources.into_iter())
         .for_each_concurrent(None, |source| {
             let tx_clone = tx.clone();
             let pool_clone = client_pool.clone();
+            let err_clone = Arc::clone(&error_signal);
             async move {
+                if err_clone.load(Ordering::Relaxed) {
+                    return;
+                }
                 let client = pool_clone.get().await.unwrap();
                 for query in query_collection.get(&source) {
                     let sql_params: Vec<String> = vec![];
                     let stream = client.query_raw(query, sql_params.iter()).await.unwrap();
                     pin_mut!(stream);
                     while let Some(Ok(row)) = stream.next().await {
+                        if err_clone.load(Ordering::Relaxed) {
+                            return;
+                        }
                         let maybe_value: Option<Json> = row.get(0);
                         // tokio::time::sleep(Duration::from_secs(1)).await;
                         if tx_clone
@@ -73,15 +82,17 @@ pub async fn send_sql_results(
                             })
                             .is_err()
                         {
-                            eprintln!("Channel broke");
-                            break;
+                            err_clone.store(true, Ordering::Relaxed);
                         }
                     }
                 }
             }
         })
         .await;
-    Ok(())
+    match error_signal.load(Ordering::Relaxed) {
+        true => Err(anyhow::anyhow!("Failed to send result to channel.")),
+        false => Ok(()),
+    }
 }
 
 pub struct StatementCollection {

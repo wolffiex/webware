@@ -59,7 +59,9 @@ async fn main() -> Result<()> {
         templates: Arc::new(RwLock::new(TemplateCollection::new(PathBuf::from(
             "project/src/templates",
         )))),
-        statements : Arc::new(RwLock::new(StatementCollection::new(PathBuf::from("project/src/sql")))),
+        statements: Arc::new(RwLock::new(StatementCollection::new(PathBuf::from(
+            "project/src/sql",
+        )))),
     };
 
     // Set up the router and routes
@@ -125,7 +127,10 @@ async fn stream_sql_response(
     {
         if state.statements.read().await.check() {
             let mut statements_w = state.statements.write().await;
-            statements_w.recompile(state.client_pool.clone()).await.unwrap();
+            statements_w
+                .recompile(state.client_pool.clone())
+                .await
+                .unwrap();
         }
     }
 

@@ -175,9 +175,9 @@ impl Template {
             "x-embed" => {
                 println!("EMERDB {:?}", &attrs);
                 attrs
-                    .get("template")
+                    .get("file")
                     .map(|template| Ok(vec![TemplatePart::Embed(template.to_string())]))
-                    .unwrap_or_else(|| Err(anyhow::anyhow!("x-embed missing \"template\"")))
+                    .unwrap_or_else(|| Err(anyhow::anyhow!("x-embed missing \"file\"")))
             }
             _ => Ok(self.convert_tag(&tag_name, attrs, tag.self_closing)?),
         };

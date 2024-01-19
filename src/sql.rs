@@ -60,19 +60,15 @@ pub async fn send_sql_results(
                 let client = pool_clone.get().await.unwrap();
                 for query in query_collection.get(&source) {
                     let sql_params: Vec<String> = vec![];
-                    let stream = client
-                        .query_raw(query, sql_params.iter())
-                        .await
-                        .unwrap();
+                    let stream = client.query_raw(query, sql_params.iter()).await.unwrap();
                     pin_mut!(stream);
                     while let Some(Ok(row)) = stream.next().await {
-                        let eventname = "stream1";
                         let maybe_value: Option<Json> = row.get(0);
                         // tokio::time::sleep(Duration::from_secs(1)).await;
                         if tx_clone
                             .send(match maybe_value {
                                 Some(value) => {
-                                    Ok(format!("event: {}\ndata: {}\n\n", eventname, value))
+                                    Ok(format!("event: {}\ndata: {}\n\n", &source, value))
                                 }
                                 None => Err(anyhow::anyhow!("Missing value")),
                             })

@@ -243,6 +243,7 @@ impl Template {
 }
 
 pub struct TemplateCollection {
+    preamble: String,
     directory: PathBuf,
     cache_key: u64,
     cache: HashMap<String, Template>,
@@ -250,7 +251,9 @@ pub struct TemplateCollection {
 
 impl TemplateCollection {
     pub fn new(directory: PathBuf) -> Self {
+        let preamble = fs::read_to_string("www/preamble.js").unwrap();
         TemplateCollection {
+            preamble,
             directory,
             cache_key: 0,
             cache: HashMap::new(),
@@ -302,6 +305,7 @@ impl TemplateCollection {
 
     pub fn get_page(&self, mut url_path: String) -> Result<String> {
         let mut page = Page {
+            preamble: self.preamble.clone(),
             parts: Vec::new(),
             sources: HashSet::new(),
         };
@@ -340,6 +344,7 @@ impl TemplateCollection {
 }
 
 struct Page {
+    preamble: String,
     parts: Vec<TemplatePart>,
     sources: HashSet<String>,
 }
@@ -372,38 +377,10 @@ impl Page {
             r#"
             <script>
               const sources = {}
-              console.log(sources)
-              const queryParams = sources.map((str, index) => 
-                  `source=${{encodeURIComponent(str)}}`).join('&');
-              const eventSource = new EventSource('/api?' + queryParams);
-              let streamRunning = true
-              const eventBuffer = [];
-              eventSource.addEventListener('stream_stop', () => {{
-                streamRunning = false
-                eventSource.close();
-              }});
-
-              let resolver = null
-              eventSource.onmessage = e => {{
-                eventBuffer.push(e);
-                const currentResolver = resolver
-                resolver = null
-                if (currentResolver) currentResolver()
-              }};
-              window.apiEventSource = async function*() {{
-                while (streamRunning || eventBuffer.length) {{
-                  if (eventBuffer.length > 0) {{
-                    yield eventBuffer.shift();
-                  }} else {{
-                    await new Promise((resolve, _) => {{
-                      resolver = resolve
-                    }});
-                  }}
-                }}
-              }}
+              {}
             </script>
         "#,
-            sources_json
+            sources_json, self.preamble,
         )
     }
 

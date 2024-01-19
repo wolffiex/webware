@@ -136,9 +136,13 @@ async fn stream_sql_response(
 
     tokio::spawn(async move {
         let statements = state.statements.read().await;
-        send_sql_results(state.client_pool, &statements, sources, tx)
+        send_sql_results(state.client_pool, &statements, sources, tx.clone())
             .await
             .unwrap();
+        tx.send(Ok("event: stream_stop\ndata: \n\n".to_string()))
+            .expect("Final message send failed");
+        // Give the client 100ms to disconnect
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     });
 
     let rx_stream = UnboundedReceiverStream::new(rx);

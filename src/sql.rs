@@ -47,7 +47,7 @@ pub async fn create_pool() -> Result<Pool> {
 type ResultSender = UnboundedSender<Result<String, anyhow::Error>>;
 pub async fn send_sql_results(
     client_pool: Arc<Pool>,
-    statements: &StatementCollection,
+    query_collection: &StatementCollection,
     sources: Vec<String>,
     tx: ResultSender,
 ) -> Result<()> {
@@ -58,10 +58,10 @@ pub async fn send_sql_results(
             let pool_clone = client_pool.clone();
             async move {
                 let client = pool_clone.get().await.unwrap();
-                for statement in statements.get(&source) {
+                for query in query_collection.get(&source) {
                     let sql_params: Vec<String> = vec![];
                     let stream = client
-                        .query_raw(statement, sql_params.iter())
+                        .query_raw(query, sql_params.iter())
                         .await
                         .unwrap();
                     pin_mut!(stream);
@@ -92,7 +92,7 @@ pub async fn send_sql_results(
 pub struct StatementCollection {
     directory: PathBuf,
     cache_key: u64,
-    cache: HashMap<String, Vec<Statement>>,
+    cache: HashMap<String, Vec<String>>,
 }
 
 impl StatementCollection {
@@ -124,7 +124,7 @@ impl StatementCollection {
             .map(|res| res.map(|e| e.path()))
             .collect::<Result<Vec<_>, std::io::Error>>()?;
 
-        let file_queries = entries
+        self.cache = entries
             .into_par_iter()
             .map(|path_buf| {
                 let file = File::open(path_buf.clone())?;
@@ -145,39 +145,11 @@ impl StatementCollection {
                     .to_string();
                 Ok((fname, queries))
             })
-            .collect::<Result<Vec<(String, Vec<String>)>>>()?;
-
-        let mut tasks = Vec::new();
-
-        // Loop over file_queries and spawn tasks
-        for (file_name, queries) in file_queries {
-            let client = client_pool.get().await?; // Clone the client
-            let task = tokio::spawn(async move {
-                let rn = Instant::now();
-                let mut statements = Vec::new();
-                for query in queries {
-                    println!("q {:?}", query);
-                    statements.push(client.prepare(query.as_str()).await.unwrap());
-                }
-                let ele = now.elapsed(); // get elapsed time
-                println!("one preparation took {:?}", ele);
-                (file_name, statements)
-            });
-            tasks.push(task);
-        }
-
-        // Await all tasks to completion and insert results into the cache
-        for task in tasks {
-            let (file_name, statements) = task.await?;
-            self.cache.insert(file_name, statements);
-        }
-
-        let elapsed = now.elapsed(); // get elapsed time
-        println!("Statement preparation took {:?}", elapsed);
+            .collect::<Result<HashMap<String, Vec<String>>>>()?;
         Ok(())
     }
 
-    fn get(&self, file_name: &String) -> &Vec<Statement> {
+    fn get(&self, file_name: &String) -> &Vec<String> {
         self.cache
             .get(file_name)
             .expect(&format!("Couldn't find source: {}", file_name))

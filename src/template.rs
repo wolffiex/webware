@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(unused_imports)]
+use anyhow::anyhow;
 use anyhow::Context;
 use anyhow::Result;
 use html5gum::Doctype;
@@ -319,7 +320,10 @@ impl TemplateCollection {
         file_name: String,
         page: &mut Page,
     ) -> Result<()> {
-        let template = self.cache.get(&file_name).unwrap();
+        let template = self
+            .cache
+            .get(&file_name)
+            .ok_or_else(|| anyhow!("Unable to find: {}", &file_name))?;
         for part in template.parts.clone() {
             if let Some(file_name) = self.resolve_reference(url_path, &part)? {
                 self.collect_parts(url_path, file_name, page)?

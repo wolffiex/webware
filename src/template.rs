@@ -155,7 +155,8 @@ impl Template {
     fn handle_start_tag(&mut self, tag: StartTag) -> Result<Vec<TemplatePart>> {
         let tag_name = to_utf8(tag.name)?;
         self.push_tag(&tag_name);
-        let attrs: BTreeMap<_, _> = tag.attributes
+        let attrs: BTreeMap<_, _> = tag
+            .attributes
             .into_iter()
             .map(|(key, value)| Ok((to_utf8(key)?, to_utf8(value)?)))
             .collect::<Result<_>>()?;

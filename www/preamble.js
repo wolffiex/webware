@@ -38,7 +38,7 @@ class AsyncStream {
 window.apiEventSource = Object.fromEntries(sources.map(source => {
   const stream = new AsyncStream()
   eventSource.addEventListener(source, e => {
-    stream.push(e)
+    stream.push(JSON.parse(e.data))
   })
   eventSource.addEventListener('stream_stop', () => {
     stream.close()

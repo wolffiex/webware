@@ -3,11 +3,15 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "build-css": "tailwindcss -i ./src/index.css -o ./www/dist/index.css"
+    "build-css": "tailwindcss -i ./src/index.css -o ./www/dist/index.css",
+    "prettier": "prettier --write \"./**/*.js\""
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "tailwindcss": "^3.4.1"
+  },
+  "dependencies": {
+    "prettier": "^3.2.4"
   }
 }

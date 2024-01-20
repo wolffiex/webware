@@ -403,10 +403,17 @@ impl Page {
 
     fn body_injection(&self) -> String {
         let mut bindings = Vec::new();
+        let mut modules = Vec::new();
         for x_attrs in self.bindings.iter() {
             let binding_strings = x_attrs
                 .iter()
-                .map(|(name, expr)| format!(r#""{}": (data)=>{}"#, name, expr))
+                .map(|(name, expr)| match name.as_str() {
+                    "module" => {
+                        modules.push(expr);
+                        format!(r#""module": "{}""#, "r1".to_string())
+                    }
+                    _ => format!(r#""{}": (data)=>{}"#, name, expr),
+                })
                 .collect::<Vec<String>>();
             bindings.push(format!(r#"{{ {} }}"#, binding_strings.join(",")));
         }

@@ -1,24 +1,26 @@
-const queryParams = sources.map(str => `source=${encodeURIComponent(str)}`).join('&');
-const eventSource = new EventSource('/api?' + queryParams);
-eventSource.addEventListener('stream_stop', e => {
+const queryParams = sources
+  .map((str) => `source=${encodeURIComponent(str)}`)
+  .join("&");
+const eventSource = new EventSource("/api?" + queryParams);
+eventSource.addEventListener("stream_stop", (e) => {
   eventSource.close();
 });
 
 class AsyncStream {
   constructor() {
-    this.resolver = null
-    this.streamRunning = true
-    this.buffer = []
+    this.resolver = null;
+    this.streamRunning = true;
+    this.buffer = [];
   }
 
   push(v) {
-    this.buffer.push(v)
-    if (this.resolver) this.resolver()
+    this.buffer.push(v);
+    if (this.resolver) this.resolver();
   }
 
   close() {
-    this.streamRunning = false
-    if (this.resolver) this.resolver()
+    this.streamRunning = false;
+    if (this.resolver) this.resolver();
   }
 
   async *[Symbol.asyncIterator]() {
@@ -27,24 +29,26 @@ class AsyncStream {
         yield this.buffer.shift();
       } else {
         await new Promise((resolve, _) => {
-          this.resolver = resolve
+          this.resolver = resolve;
         });
-        this.resolver = null
+        this.resolver = null;
       }
     }
   }
 }
 
-window.apiEventSource = Object.fromEntries(sources.map(source => {
-  const stream = new AsyncStream()
-  eventSource.addEventListener(source, e => {
-    stream.push(JSON.parse(e.data))
-  })
-  eventSource.addEventListener('stream_stop', () => {
-    stream.close()
-  });
-  return [source, stream]
-}))
+window.apiEventSource = Object.fromEntries(
+  sources.map((source) => {
+    const stream = new AsyncStream();
+    eventSource.addEventListener(source, (e) => {
+      stream.push(JSON.parse(e.data));
+    });
+    eventSource.addEventListener("stream_stop", () => {
+      stream.close();
+    });
+    return [source, stream];
+  }),
+);
 
-console.log(window.apiEventSource)
-console.log("preamble at", performance.now())
+console.log(window.apiEventSource);
+console.log("preamble at", performance.now());

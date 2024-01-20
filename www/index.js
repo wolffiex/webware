@@ -10,8 +10,23 @@ for (const [source, eventStream] of Object.entries(window.apiEventSource)) {
 }
 */
 
+function bind(node, binding) {
+  console.log("BB", node, binding)
+}
+
 export default function(...bindings) {
-  for (const binding of bindings) {
-    console.log("BIND", binding)
-  }
+  const walker = document.createTreeWalker(
+    document.body, // root
+    NodeFilter.SHOW_ELEMENT, // filter
+    { acceptNode: node => "bound" in node.dataset
+      ? NodeFilter.FILTER_ACCEPT
+      : NodeFilter.FILTER_SKIP
+    }, // node filter function
+    false
+  )
+  let node, i = 0
+  do {
+    node = walker.nextNode();
+    if (node) bind(node, bindings[i])
+  } while(node)
 }

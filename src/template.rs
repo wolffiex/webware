@@ -198,9 +198,6 @@ impl Template {
     ) -> Result<Vec<TemplatePart>> {
         let mut parts: Vec<TemplatePart> = Vec::new();
         parts.push(format!("<{}", tag_name).into());
-        if !attributes.is_empty() {
-            parts.push(" ".into());
-        }
         let mut x_attrs = BTreeMap::new();
         for (attr_name, attr_value) in attributes {
             match attr_name.as_str() {
@@ -210,6 +207,7 @@ impl Template {
                     x_attrs.insert(strip_name, attr_value);
                 }
                 _ => {
+                    parts.push(" ".into());
                     parts.push(attr_name.into());
                     if !attr_value.is_empty() {
                         parts.push(format!("=\"{}\"", attr_value).into());
@@ -217,16 +215,17 @@ impl Template {
                 }
             }
         }
-        if self_closing {
-            parts.push("/".into());
-        }
-        parts.push(">".into());
         if !x_attrs.is_empty() {
             if let Some(source) = x_attrs.get("source") {
                 parts.push(TemplatePart::Source(source.to_string()));
             }
             parts.push(TemplatePart::Binding(x_attrs));
+            parts.push(" data-bound".into());
         }
+        if self_closing {
+            parts.push("/".into());
+        }
+        parts.push(">".into());
         Ok(parts)
     }
 

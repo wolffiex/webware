@@ -1,4 +1,3 @@
-console.log(sources)
 const queryParams = sources.map(str => `source=${encodeURIComponent(str)}`).join('&');
 const eventSource = new EventSource('/api?' + queryParams);
 eventSource.addEventListener('stream_stop', e => {
@@ -14,7 +13,6 @@ class AsyncStream {
 
   push(v) {
     this.buffer.push(v)
-    // console.log(this, this.buffer, this.resolver)
     if (this.resolver) this.resolver()
   }
 
@@ -43,7 +41,6 @@ window.apiEventSource = Object.fromEntries(sources.map(source => {
     stream.push(e)
   })
   eventSource.addEventListener('stream_stop', () => {
-    console.log('wanna clo', source, stream)
     stream.close()
   });
   return [source, stream]

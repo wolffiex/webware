@@ -9,9 +9,31 @@ for (const [source, eventStream] of Object.entries(window.apiEventSource)) {
   }
 }
 */
+class BindTree {
+  constructor(node, binding) {
+    this.node = node
+    this.binding = binding || {}
+    this.children = []
+  }
+  addChild(node, binding) {
+    const child = new BindTree(node, binding)
+    this.children.push(child)
+    return child
+  }
+}
 
-function bind(node, binding) {
-  console.log("BB", node, binding)
+function init(bindTree) {
+  console.log('bT', bindTree)
+}
+
+function findParent(bindSet, node) {
+  let p = node
+  while(p) {
+    if (bindSet.has(p)) {
+      return bindSet.get(p)
+    }
+    p = p.parentNode
+  } 
 }
 
 export default function(...bindings) {
@@ -24,9 +46,16 @@ export default function(...bindings) {
     }, // node filter function
     false
   )
+  const bindMap = new Map()
+  const bindTree = new BindTree(document.body)
   let node, i = 0
   do {
     node = walker.nextNode();
-    if (node) bind(node, bindings[i])
+    if (node) {
+      const boundParent = findParent(bindMap, node) || bindTree
+      const binding = boundParent.addChild(node, bindings[i++])
+      bindMap.set(node, binding)
+    }
   } while(node)
+  init(bindTree)
 }

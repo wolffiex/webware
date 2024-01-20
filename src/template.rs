@@ -202,8 +202,7 @@ impl Template {
         for (attr_name, attr_value) in attributes {
             match attr_name.as_str() {
                 name if name.starts_with("x-") => {
-                    println!("ATR {} {}", attr_name, attr_value);
-                    let strip_name: String = name.chars().skip(2).collect::<String>().to_string();
+                    let strip_name: String = name.chars().skip(2).collect();
                     x_attrs.insert(strip_name, attr_value);
                 }
                 _ => {
@@ -218,6 +217,7 @@ impl Template {
         if !x_attrs.is_empty() {
             if let Some(source) = x_attrs.get("source") {
                 parts.push(TemplatePart::Source(source.to_string()));
+                x_attrs.insert("source".to_string(), serde_json::json!(source).to_string());
             }
             parts.push(TemplatePart::Binding(x_attrs));
             parts.push(" data-bound".into());

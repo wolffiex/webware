@@ -1,3 +1,4 @@
+dayjs.extend(dayjs_plugin_relativeTime)
 console.log("index.js at", performance.now())
 /*
 for (const [source, eventStream] of Object.entries(window.apiEventSource)) {
@@ -37,14 +38,23 @@ class BindTree {
     }
   }
   bind(data) {
+    let hasFailed = false
+    const dataProxy = new Proxy(data, {
+        get(target, prop, receiver) {
+          if (!(prop in target)) {
+            hasFailed = true
+          }
+          return Reflect.get(target, prop, receiver);
+        }
+    });
     for (const [bind, fn] of this.bindings.entries()) {
       let value
       try {
-        console.log('trye', bind)
-        value = fn(data)
+        hasFailed = false
+        const maybeValue = fn(dataProxy)
+        if (!hasFailed) value = maybeValue
       } catch(e) {
-        // intentionally ignored
-        console.error(e)
+        console.error("Bound attribute error", e)
       }
       if (value !== undefined) {
         this.applyBinding(bind, value)

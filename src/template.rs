@@ -86,6 +86,7 @@ enum TemplatePart {
     Embed(String),
     BodyInjection,
     Source(String),
+    Binding(BTreeMap<String, String>),
 }
 
 impl From<&str> for TemplatePart {
@@ -200,11 +201,13 @@ impl Template {
         if !attributes.is_empty() {
             parts.push(" ".into());
         }
+        let mut x_attrs = BTreeMap::new();
         for (attr_name, attr_value) in attributes {
             match attr_name.as_str() {
-                "x-source" => parts.push(TemplatePart::Source(attr_value)),
-                value if value.starts_with("x-") => {
+                name if name.starts_with("x-") => {
                     println!("ATR {} {}", attr_name, attr_value);
+                    let strip_name: String = name.chars().skip(2).collect::<String>().to_string();
+                    x_attrs.insert(strip_name, attr_value);
                 }
                 _ => {
                     parts.push(attr_name.into());
@@ -218,6 +221,12 @@ impl Template {
             parts.push("/".into());
         }
         parts.push(">".into());
+        if !x_attrs.is_empty() {
+            if let Some(source) = x_attrs.get("source") {
+                parts.push(TemplatePart::Source(source.to_string()));
+            }
+            parts.push(TemplatePart::Binding(x_attrs));
+        }
         Ok(parts)
     }
 
@@ -310,6 +319,7 @@ impl TemplateCollection {
             preamble: self.preamble.clone(),
             parts: Vec::new(),
             sources: HashSet::new(),
+            bindings: Vec::new(),
         };
         self.collect_parts(&mut url_path, "index.html".to_string(), &mut page)?;
         Ok(page.render())
@@ -352,12 +362,15 @@ struct Page {
     preamble: String,
     parts: Vec<TemplatePart>,
     sources: HashSet<String>,
+    bindings: Vec<BTreeMap<String, String>>,
 }
 
 impl Page {
     fn push_part(&mut self, part: TemplatePart) {
         if let TemplatePart::Source(name) = part {
             self.sources.insert(name.to_string());
+        } else if let TemplatePart::Binding(x_attrs) = part {
+            self.bindings.push(x_attrs);
         } else {
             self.parts.push(part);
         }
@@ -389,7 +402,23 @@ impl Page {
         )
     }
 
-    fn body_injection(&self) -> &str {
-        r#"<script type="module" src="index.js"></script>"#
+    fn body_injection(&self) -> String {
+        let mut bindings = Vec::new();
+        for x_attrs in self.bindings.iter() {
+            let binding_strings = x_attrs
+                .iter()
+                .map(|(name, expr)| format!(r#""{}": (data)=>{}"#, name, expr))
+                .collect::<Vec<String>>();
+            bindings.push(format!(r#"{{ {} }}"#, binding_strings.join(",")));
+        }
+        format!(
+            r#"
+        <script type="module">
+            import init from "/index.js"
+            init({})
+        </script>
+        "#,
+            bindings.join(",")
+        )
     }
 }

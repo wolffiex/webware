@@ -50,3 +50,4 @@ window.apiEventSource = Object.fromEntries(sources.map(source => {
 }))
 
 console.log(window.apiEventSource)
+console.log("preamble at", performance.now())

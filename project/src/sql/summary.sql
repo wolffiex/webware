@@ -21,6 +21,16 @@ SELECT json_build_object(
 ) FROM PressureBuckets
 LIMIT 1;
 
+WITH time_boundaries AS (
+    SELECT
+        DATE_TRUNC('day', NOW() - INTERVAL '1 day') AT TIME ZONE 'UTC' AT TIME ZONE 'PST' as start_time,
+        DATE_TRUNC('day', NOW()) AT TIME ZONE 'UTC' AT TIME ZONE 'PST' as end_time
+),
+relevant_rows AS (
+    SELECT time, outdoor_temp, uvi FROM weather, time_boundaries
+    WHERE time >= time_boundaries.start_time
+    AND time < time_boundaries.end_time
+)
 SELECT 
     row_to_json(t) 
 FROM 
@@ -39,18 +49,12 @@ FROM
       'value', max_uvi.uvi
     ) AS high_uvi
   FROM 
-      (SELECT time, outdoor_temp FROM weather 
-       WHERE time >= DATE_TRUNC('day', NOW() - INTERVAL '1 day') 
-       AND time < DATE_TRUNC('day', NOW()) 
+      (SELECT time, outdoor_temp FROM relevant_rows
        ORDER BY outdoor_temp DESC LIMIT 1) AS max_temp,
 
-      (SELECT time, outdoor_temp FROM weather
-       WHERE time >= DATE_TRUNC('day', NOW() - INTERVAL '1 day') 
-       AND time < DATE_TRUNC('day', NOW()) 
+      (SELECT time, outdoor_temp FROM relevant_rows
        ORDER BY outdoor_temp ASC LIMIT 1) AS min_temp,
 
-      (SELECT time, uvi FROM weather
-       WHERE time >= DATE_TRUNC('day', NOW() - INTERVAL '1 day') 
-       AND time < DATE_TRUNC('day', NOW()) 
+      (SELECT time, uvi FROM relevant_rows 
        ORDER BY uvi DESC LIMIT 1) AS max_uvi
   ) t;

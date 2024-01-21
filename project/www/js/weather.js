@@ -1,5 +1,4 @@
 export default async function ({ source, node }) {
-  console.log("wheeat got called", source);
   let pressureData = [];
   let temperatureData = [];
   for await (const data of source) {

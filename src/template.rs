@@ -72,6 +72,33 @@ impl Route {
     }
 }
 
+#[derive(Debug, Clone)]
+struct Binding {
+    module: Option<String>,
+    source: Option<String>,
+    dynamic: String,
+}
+
+impl From<BTreeMap<String, String>> for Binding {
+    fn from(mut x_attrs: BTreeMap<String, String>) -> Self {
+        let module = x_attrs.remove("module");
+        let source = x_attrs.remove("source");
+        let dynamic: String = x_attrs
+            .iter()
+            .map(|(name, expr)| {
+                let js_fn = format!(r#"(data) => {}"#, expr);
+                format!(r#"{}: {}"#, name, js_fn)
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        Binding {
+            module,
+            source,
+            dynamic: format!("{{{}}}", dynamic),
+        }
+    }
+}
+
 pub struct Template {
     tag_stack: Vec<String>,
     parts: Vec<TemplatePart>,
@@ -85,8 +112,7 @@ enum TemplatePart {
     Route(Route),
     Embed(String),
     BodyInjection,
-    Source(String),
-    Binding(BTreeMap<String, String>),
+    Binding(Binding),
 }
 
 impl From<&str> for TemplatePart {
@@ -215,11 +241,7 @@ impl Template {
             }
         }
         if !x_attrs.is_empty() {
-            if let Some(source) = x_attrs.get("source") {
-                parts.push(TemplatePart::Source(source.to_string()));
-                x_attrs.insert("source".to_string(), serde_json::json!(source).to_string());
-            }
-            parts.push(TemplatePart::Binding(x_attrs));
+            parts.push(TemplatePart::Binding(x_attrs.into()));
             parts.push(" data-bound".into());
         }
         if self_closing {
@@ -361,15 +383,16 @@ struct Page {
     preamble: String,
     parts: Vec<TemplatePart>,
     sources: HashSet<String>,
-    bindings: Vec<BTreeMap<String, String>>,
+    bindings: Vec<Binding>,
 }
 
 impl Page {
     fn push_part(&mut self, part: TemplatePart) {
-        if let TemplatePart::Source(name) = part {
-            self.sources.insert(name.to_string());
-        } else if let TemplatePart::Binding(x_attrs) = part {
-            self.bindings.push(x_attrs);
+        if let TemplatePart::Binding(binding) = part {
+            self.bindings.push(binding.clone());
+            if let Some(source) = binding.source {
+                self.sources.insert(source);
+            }
         } else {
             self.parts.push(part);
         }
@@ -402,29 +425,40 @@ impl Page {
     }
 
     fn body_injection(&self) -> String {
-        let mut bindings = Vec::new();
-        let mut modules = Vec::new();
-        for x_attrs in self.bindings.iter() {
-            let binding_strings = x_attrs
-                .iter()
-                .map(|(name, expr)| match name.as_str() {
-                    "module" => {
-                        modules.push(expr);
-                        format!(r#""module": "{}""#, "r1".to_string())
-                    }
-                    _ => format!(r#""{}": (data)=>{}"#, name, expr),
-                })
-                .collect::<Vec<String>>();
-            bindings.push(format!(r#"{{ {} }}"#, binding_strings.join(",")));
-        }
+        let mut modules = HashMap::new();
+        let js_bindings: Vec<String> = self
+            .bindings
+            .iter()
+            .map(|binding| {
+                let mut js_binding = Vec::new();
+                if let Some(source) = &binding.source {
+                    js_binding.push(format!(r#"source:"{}""#, source));
+                }
+                if let Some(module_path) = &binding.module {
+                    let module_name = format!("m{}", modules.len());
+                    modules.insert(module_name.clone(), module_path);
+                    js_binding.push(format!(r#"module:{}"#, module_name));
+                }
+                js_binding.push(format!(r#"dynamic: {}"#, binding.dynamic));
+
+                format!(r#"{{ {} }}"#, js_binding.join(","))
+            })
+            .collect();
+        let imports: Vec<String> = modules
+            .iter()
+            .map(|(name, path)| format!(r#"import {} from "{}""#, name, path))
+            .collect();
         format!(
             r#"
         <script type="module">
             import init from "/index.js"
+            {}
+
             init({})
         </script>
         "#,
-            bindings.join(",")
+            imports.join("\n"),
+            js_bindings.join(",")
         )
     }
 }

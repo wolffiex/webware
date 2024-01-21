@@ -11,15 +11,7 @@ for (const [source, eventStream] of Object.entries(window.apiEventSource)) {
 class BindTree {
   constructor(node, bindings = {}) {
     this.node = node;
-    this.bindings = new Map();
-    this.source = null;
-    for (const [bind, fn] of Object.entries(bindings)) {
-      if (bind == "source") {
-        this.source = fn(null);
-      } else {
-        this.bindings.set(bind, fn);
-      }
-    }
+    this.bindings = bindings
     this.data = null;
     this.children = [];
   }
@@ -46,7 +38,9 @@ class BindTree {
         return Reflect.get(target, prop, receiver);
       },
     });
-    for (const [bind, fn] of this.bindings.entries()) {
+    console.log('bind', this.bindings.dynamic)
+    for (const [bind, fn] of Object.entries(this.bindings.dynamic || {})) {
+      console.log('dyn', bind, fn)
       let value;
       try {
         hasFailed = false;
@@ -64,7 +58,7 @@ class BindTree {
     }
   }
   inheritBinding(data) {
-    if (!this.source) this.bind(data);
+    if (!this.bindings.source) this.bind(data);
   }
   applyBinding(name, value) {
     switch (name) {
@@ -80,13 +74,14 @@ class BindTree {
 function init(bindTree) {
   const sourceBindings = new Map();
   bindTree.visit((treeNode) => {
-    if (treeNode.source) {
-      if (!sourceBindings.has(treeNode.source)) {
-        sourceBindings.set(treeNode.source, []);
+    if (treeNode.bindings.source) {
+      if (!sourceBindings.has(treeNode.bindings.source)) {
+        sourceBindings.set(treeNode.bindings.source, []);
       }
-      sourceBindings.get(treeNode.source).push(treeNode);
+      sourceBindings.get(treeNode.bindings.source).push(treeNode);
     }
   });
+  console.log("sssBBB", sourceBindings)
   for (const [source, treeNodes] of sourceBindings) {
     const eventStream = window.apiEventSource[source];
     processEventStream(eventStream, treeNodes);

@@ -1,19 +1,16 @@
 console.log("index.js at", performance.now());
-/*
-for (const [source, eventStream] of Object.entries(window.apiEventSource)) {
-  console.log(source, eventStream)
-  let n = 0
-  for await (const event of eventStream) {
-    if (n++ < 5) console.log("gotone", performance.now(), source, event)
-  }
-}
-*/
 class BindTree {
   constructor(node, bindings = {}) {
     this.node = node;
-    this.bindings = bindings
+    this.bindings = bindings;
     this.data = null;
     this.children = [];
+    this.source = null;
+    if (bindings.module) {
+      const source = bindings.source ? new AsyncStream() : null;
+      bindings.module({ node, source });
+      this.source = source;
+    }
   }
 
   addChild(node, bindings, source) {
@@ -38,9 +35,7 @@ class BindTree {
         return Reflect.get(target, prop, receiver);
       },
     });
-    console.log('bind', this.bindings.dynamic)
     for (const [bind, fn] of Object.entries(this.bindings.dynamic || {})) {
-      console.log('dyn', bind, fn)
       let value;
       try {
         hasFailed = false;
@@ -81,7 +76,6 @@ function init(bindTree) {
       sourceBindings.get(treeNode.bindings.source).push(treeNode);
     }
   });
-  console.log("sssBBB", sourceBindings)
   for (const [source, treeNodes] of sourceBindings) {
     const eventStream = window.apiEventSource[source];
     processEventStream(eventStream, treeNodes);
@@ -90,11 +84,14 @@ function init(bindTree) {
 }
 
 async function processEventStream(eventStream, treeNodes) {
-  console.log(eventStream, treeNodes);
   for await (const data of eventStream) {
     for (const treeNode of treeNodes) {
+      treeNode.source?.push(data);
       treeNode.bind(data);
     }
+  }
+  for (const treeNode of treeNodes) {
+    treeNode.source?.close();
   }
 }
 

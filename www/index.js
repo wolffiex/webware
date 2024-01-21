@@ -47,6 +47,7 @@ class BindTree {
       } catch (e) {
         if (e.name === 'DataNotFoundError') {
           // Intentionally ignored
+          // console.log('missed', e)
         } else {
           console.error("Bound attribute error", e);
         }

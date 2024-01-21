@@ -37,7 +37,7 @@ FROM
     json_build_object(
       'time', max_uvi.time, 
       'value', max_uvi.uvi
-    ) AS uvi
+    ) AS high_uvi
   FROM 
       (SELECT time, outdoor_temp FROM weather 
        WHERE time >= DATE_TRUNC('day', NOW() - INTERVAL '1 day') 

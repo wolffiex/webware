@@ -454,11 +454,13 @@ impl Page {
             import init from "/index.js"
             {}
 
-            init({})
+            init(
+            {}
+            )
         </script>
         "#,
             imports.join("\n"),
-            js_bindings.join(",")
+            js_bindings.join(",\n")
         )
     }
 }

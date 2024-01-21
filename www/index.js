@@ -1,4 +1,10 @@
 console.log("index.js at", performance.now());
+class DataNotFoundError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'DataNotFoundError';
+  }
+}
 class BindTree {
   constructor(node, bindings = {}) {
     this.node = node;
@@ -26,11 +32,10 @@ class BindTree {
     }
   }
   bind(data) {
-    let hasFailed = false;
     const dataProxy = new Proxy(data, {
       get(target, prop, receiver) {
         if (!(prop in target)) {
-          hasFailed = true;
+          throw new DataNotFoundError(prop);
         }
         return Reflect.get(target, prop, receiver);
       },
@@ -38,11 +43,13 @@ class BindTree {
     for (const [bind, fn] of Object.entries(this.bindings.dynamic || {})) {
       let value;
       try {
-        hasFailed = false;
-        const maybeValue = fn(dataProxy);
-        if (!hasFailed) value = maybeValue;
+        value = fn(dataProxy);
       } catch (e) {
-        console.error("Bound attribute error", e);
+        if (e.name === 'DataNotFoundError') {
+          // Intentionally ignored
+        } else {
+          console.error("Bound attribute error", e);
+        }
       }
       if (value !== undefined) {
         this.applyBinding(bind, value);

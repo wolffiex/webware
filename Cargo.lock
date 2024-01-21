@@ -742,34 +742,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "webware"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "axum-macros",
- "bytes",
- "deadpool",
- "deadpool-postgres",
- "fnv",
- "full",
- "futures",
- "html5gum",
- "hyper",
- "hyper-staticfile",
- "rayon",
- "serde",
- "serde_json",
- "tokio",
- "tokio-postgres",
- "tokio-stream",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "nu-ansi-term"
 version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1569,6 +1541,34 @@ checksum = "50c24a44ec86bb68fbecd1b3efed7e85ea5621b39b35ef2766b66cd984f8010f"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "webware"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "axum-macros",
+ "bytes",
+ "deadpool",
+ "deadpool-postgres",
+ "fnv",
+ "full",
+ "futures",
+ "html5gum",
+ "hyper",
+ "hyper-staticfile",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-postgres",
+ "tokio-stream",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

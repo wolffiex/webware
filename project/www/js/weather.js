@@ -1,5 +1,3 @@
-console.log("hi from weaher");
-
 export default async function ({ source, node }) {
   console.log("wheeat got called", source);
   let pressureData = [];
@@ -53,7 +51,7 @@ function getTwoDayChart(pressureData, temperatureData) {
           beginAtZero: false,
           title: {
             display: true,
-            text: "Temperature (°C)",
+            text: "Temperature (°F)",
           },
           grid: {
             drawOnChartArea: true, // Temperature has grid lines

@@ -15,12 +15,17 @@ class AsyncStream {
 
   push(v) {
     this.buffer.push(v);
-    if (this.resolver) this.resolver();
+    this._aContinue()
   }
 
   close() {
     this.streamRunning = false;
+    this._aContinue()
+  }
+
+  _aContinue() {
     if (this.resolver) this.resolver();
+    this.resolver = null;
   }
 
   async *[Symbol.asyncIterator]() {
@@ -31,7 +36,6 @@ class AsyncStream {
         await new Promise((resolve, _) => {
           this.resolver = resolve;
         });
-        this.resolver = null;
       }
     }
   }

@@ -1,0 +1,2 @@
+[target.arm-linux-gnueabihf]
+linker = "/opt/homebrew/Cellar/arm-linux-gnueabihf-binutils/2.41_1/bin/arm-linux-gnueabihf-ld"
